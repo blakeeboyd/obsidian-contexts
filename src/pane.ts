@@ -469,6 +469,7 @@ export class ContextsPane extends ItemView {
     if (e.tasksAdded || e.tasksRemoved) chip("check-square", pm(e.tasksAdded, e.tasksRemoved), "tasks added/removed");
     if (e.tasksCompleted) chip("check", `${e.tasksCompleted.length}`, "tasks completed");
     if (e.tasksReopened) chip("undo-2", `${e.tasksReopened.length}`, "tasks reopened");
+    if (e.urlsAdded || e.urlsRemoved) chip("globe", pm(e.urlsAdded, e.urlsRemoved), "external links");
     if (e.bold) chip("bold", num(e.bold), "bold");
     if (e.italic) chip("italic", num(e.italic), "italic");
     if (e.fmChanged) {
@@ -566,8 +567,23 @@ export class ContextsPane extends ItemView {
       else if (part.startsWith("links removed:")) this.linkLine(el, "links removed", edit.linksRemoved ?? [], sourcePath);
       else if (part.startsWith("tags added:")) this.tagLine(el, "tags added", edit.tagsAdded ?? []);
       else if (part.startsWith("tags removed:")) this.tagLine(el, "tags removed", edit.tagsRemoved ?? []);
+      else if (part.startsWith("external links added:")) this.urlLine(el, "external links added", edit.urlsAdded ?? []);
+      else if (part.startsWith("external links removed:"))
+        this.urlLine(el, "external links removed", edit.urlsRemoved ?? []);
       else el.createDiv({ text: part });
     }
+  }
+
+  /** External URLs as real anchors: click opens in the browser. */
+  private urlLine(el: HTMLElement, label: string, urls: string[]): void {
+    if (!urls.length) return;
+    const div = el.createDiv();
+    div.createSpan({ text: `${label}: ` });
+    urls.forEach((url, idx) => {
+      if (idx) div.createSpan({ text: ", " });
+      const a = div.createEl("a", { text: url, href: url, cls: "contexts-link" });
+      a.addEventListener("click", (evt) => evt.stopPropagation());
+    });
   }
 
   private openPath(path: string, evt: MouseEvent): void {

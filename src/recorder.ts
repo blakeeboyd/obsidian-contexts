@@ -17,6 +17,7 @@ export interface Snapshot {
   footnotes: string[];
   tasksOpen: string[];
   tasksDone: string[];
+  urls: string[];
   bold: number;
   italic: number;
   fm: Record<string, string>; // frontmatter, values pre-stringified for cheap compare
@@ -43,6 +44,8 @@ export interface EditDelta {
   tasksCompleted?: string[];
   tasksReopened?: string[];
   tasksRemoved?: string[];
+  urlsAdded?: string[];
+  urlsRemoved?: string[];
   bold?: number; // net count change
   italic?: number;
   /** Frontmatter changes: key → [before, after] (null = absent). Pre-2026-09-08 logs hold a bare key list. */
@@ -104,6 +107,17 @@ export function extractTasks(content: string): { open: string[]; done: string[] 
     (m[1] === " " ? open : done).push(clip(m[2]));
   }
   return { open, done };
+}
+
+/**
+ * External URLs, wherever they appear: markdown links, autolinks, bare.
+ * A pasted URL is a citation event — a resource brought into this thinking
+ * at this moment. ponytail: URLs containing parens lose their tail.
+ */
+export function extractUrls(content: string): string[] {
+  const out = new Set<string>();
+  for (const m of content.matchAll(/https?:\/\/[^\s)<>\]"']+/g)) out.add(clip(m[0]));
+  return [...out];
 }
 
 export function extractHeadings(content: string): string[] {
@@ -314,6 +328,9 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   if (tasksCompleted.length) delta.tasksCompleted = tasksCompleted;
   if (tasksReopened.length) delta.tasksReopened = tasksReopened;
   if (tasksRemoved.length) delta.tasksRemoved = tasksRemoved;
+  const [urlsAdded, urlsRemoved] = diffList(before.urls, after.urls);
+  if (urlsAdded.length) delta.urlsAdded = urlsAdded;
+  if (urlsRemoved.length) delta.urlsRemoved = urlsRemoved;
   if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
   if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
   const fmChanged: Record<string, [string | null, string | null]> = {};

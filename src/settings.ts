@@ -34,6 +34,7 @@ export interface CaptureSettings {
   highlights: boolean;
   footnotes: boolean;
   tasks: boolean;
+  urls: boolean;
   formatting: boolean;
   frontmatter: boolean;
   ctime: boolean;
@@ -59,6 +60,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
     highlights: true,
     footnotes: true,
     tasks: true,
+    urls: true,
     formatting: true,
     frontmatter: true,
     ctime: true,
@@ -80,6 +82,7 @@ const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
   highlights: ["Highlights", "==Highlighted== text added or removed, with the text itself."],
   footnotes: ["Footnotes", "Footnotes added or removed, with their text."],
   tasks: ["Tasks", "Checkbox tasks added, completed, reopened, or removed, with their text."],
+  urls: ["External links", "Web URLs added or removed — when a resource entered which note."],
   formatting: ["Bold and italics", "Net change in bold and italic emphasis counts."],
   frontmatter: ["Frontmatter fields", "Which frontmatter keys changed, with their before and after values."],
   ctime: ["Creation time", "Stamp each span with the file's creation time, the anchor for healing renames made outside Obsidian."],

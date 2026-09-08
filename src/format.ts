@@ -63,6 +63,7 @@ export function fmtDelta(e: EditDelta): string {
     parts.push(`tasks +${e.tasksAdded?.length ?? 0}/-${e.tasksRemoved?.length ?? 0}`);
   if (e.tasksCompleted) parts.push(`done ${e.tasksCompleted.length}`);
   if (e.tasksReopened) parts.push(`reopened ${e.tasksReopened.length}`);
+  if (e.urlsAdded || e.urlsRemoved) parts.push(`urls +${e.urlsAdded?.length ?? 0}/-${e.urlsRemoved?.length ?? 0}`);
   if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
   if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
   if (e.fmChanged) {
@@ -92,6 +93,8 @@ export function fmtDeltaVerbose(e: EditDelta): string {
   if (e.tasksCompleted?.length) lines.push(`tasks completed: ${e.tasksCompleted.join(", ")}`);
   if (e.tasksReopened?.length) lines.push(`tasks reopened: ${e.tasksReopened.join(", ")}`);
   if (e.tasksRemoved?.length) lines.push(`tasks removed: ${e.tasksRemoved.join(", ")}`);
+  if (e.urlsAdded?.length) lines.push(`external links added: ${e.urlsAdded.join(", ")}`);
+  if (e.urlsRemoved?.length) lines.push(`external links removed: ${e.urlsRemoved.join(", ")}`);
   if (e.bold) lines.push(`bold ${num(e.bold)}`);
   if (e.italic) lines.push(`italic ${num(e.italic)}`);
   if (e.fmChanged) {

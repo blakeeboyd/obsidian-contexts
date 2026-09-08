@@ -8,6 +8,7 @@ import {
   extractHeadings,
   extractHighlights,
   extractTasks,
+  extractUrls,
   extractLinks,
   extractTags,
   fmTagList,
@@ -24,6 +25,7 @@ function snap(partial: Partial<Snapshot> = {}): Snapshot {
     footnotes: [],
     tasksOpen: [],
     tasksDone: [],
+    urls: [],
     bold: 0,
     italic: 0,
     fm: {},
@@ -81,6 +83,16 @@ describe("extractors", () => {
       tasksReopened: ["d"],
       tasksRemoved: ["c"],
     });
+  });
+
+  it("finds external URLs in markdown links, autolinks, and bare form", () => {
+    const text = "See [docs](https://example.com/a) and <https://b.org> plus bare https://c.net/x?y=1 done";
+    expect(extractUrls(text)).toEqual(["https://example.com/a", "https://b.org", "https://c.net/x?y=1"]);
+  });
+
+  it("diffs URLs into added and removed", () => {
+    const d = diffSnapshots(snap({ urls: ["https://old.com"] }), snap({ urls: ["https://new.com"] }));
+    expect(d).toEqual({ urlsAdded: ["https://new.com"], urlsRemoved: ["https://old.com"] });
   });
 
   it("counts bold and italic without conflating them", () => {

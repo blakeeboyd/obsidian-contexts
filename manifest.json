@@ -1,0 +1,9 @@
+{
+  "id": "obsidian-contexts",
+  "name": "Contexts",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "A temporal memory for your vault: records which notes you work in, when, what changed, and what was open alongside.",
+  "author": "Blake Boyd",
+  "isDesktopOnly": false
+}

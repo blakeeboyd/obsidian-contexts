@@ -23,6 +23,9 @@ export interface Snapshot {
 /** What changed while the file was active. Only present fields changed. */
 export interface EditDelta {
   words?: number;
+  /** Merge-level only (stint summaries): gross word movement, summed from per-visit nets. */
+  wordsAdded?: number;
+  wordsRemoved?: number;
   linksAdded?: string[];
   linksRemoved?: string[];
   tagsAdded?: string[];

@@ -183,13 +183,19 @@ describe("coalesceTrail", () => {
     expect(out.map((i) => (isStint(i) ? "stint" : i.type))).toEqual(["stint", "extmod", "stint", "stint"]);
   });
 
-  it("merges edit deltas across a stint's spans", () => {
+  it("merges edit deltas keeping gross activity, not net effect", () => {
     const trail = [
       { ...span("A.md", 0), edit: { words: 10, linksAdded: ["X"] } },
       { ...span("A.md", 6 * MIN), edit: { words: -3, linksAdded: ["Y"], linksRemoved: ["X"] } },
     ];
     const stint = coalesceTrail(trail, 30 * MIN)[0] as Stint;
-    expect(stint.edit).toEqual({ words: 7, linksAdded: ["Y"] }); // X added then removed nets out
+    // X shows on both sides (added AND removed); words split by direction.
+    expect(stint.edit).toEqual({
+      wordsAdded: 10,
+      wordsRemoved: 3,
+      linksAdded: ["X", "Y"],
+      linksRemoved: ["X"],
+    });
   });
 });
 
@@ -202,8 +208,8 @@ describe("mergeDeltas", () => {
     expect(merged).toEqual({ fmChanged: { status: ['"draft"', '"done"'] } });
   });
 
-  it("returns undefined when everything cancels", () => {
-    expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toBeUndefined();
+  it("shows word movement in both directions even when the net is zero", () => {
+    expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toEqual({ wordsAdded: 5, wordsRemoved: 5 });
     expect(mergeDeltas([])).toBeUndefined();
   });
 });

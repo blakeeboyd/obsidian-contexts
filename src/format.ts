@@ -34,7 +34,9 @@ export function relTime(t: number, now = Date.now()): string {
 /** Compact one-line summary of an edit delta: "+12w, links +1/-0, hl +2/-0". */
 export function fmtDelta(e: EditDelta): string {
   const parts: string[] = [];
-  if (e.words) parts.push(`${e.words > 0 ? "+" : ""}${e.words}w`);
+  if (e.wordsAdded) parts.push(`+${e.wordsAdded}w`);
+  if (e.wordsRemoved) parts.push(`-${e.wordsRemoved}w`);
+  if (e.words && !e.wordsAdded && !e.wordsRemoved) parts.push(`${e.words > 0 ? "+" : ""}${e.words}w`);
   if (e.linksAdded || e.linksRemoved)
     parts.push(`links +${e.linksAdded?.length ?? 0}/-${e.linksRemoved?.length ?? 0}`);
   if (e.tagsAdded || e.tagsRemoved)
@@ -59,7 +61,12 @@ export function fmtDelta(e: EditDelta): string {
 export function fmtDeltaVerbose(e: EditDelta): string {
   const lines: string[] = [];
   const num = (n: number) => `${n > 0 ? "+" : ""}${n}`;
-  if (e.words) lines.push(`words ${num(e.words)}`);
+  if (e.wordsAdded || e.wordsRemoved) {
+    const parts = [];
+    if (e.wordsAdded) parts.push(`+${e.wordsAdded}`);
+    if (e.wordsRemoved) parts.push(`-${e.wordsRemoved}`);
+    lines.push(`words ${parts.join(" / ")}`);
+  } else if (e.words) lines.push(`words ${num(e.words)}`);
   const list = (label: string, added?: string[], removed?: string[]) => {
     if (added?.length) lines.push(`${label} added: ${added.join(", ")}`);
     if (removed?.length) lines.push(`${label} removed: ${removed.join(", ")}`);

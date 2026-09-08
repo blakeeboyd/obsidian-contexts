@@ -1,5 +1,30 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { AbstractInputSuggest, App, PluginSettingTab, Setting, TFolder } from "obsidian";
 import type ContextsPlugin from "./main";
+
+/** Folder-path autocomplete for a text input (the Foliate taxa-folder pattern). */
+class FolderSuggest extends AbstractInputSuggest<TFolder> {
+  constructor(app: App, private input: HTMLInputElement, private onPick: (path: string) => void) {
+    super(app, input);
+  }
+
+  getSuggestions(query: string): TFolder[] {
+    const q = query.toLowerCase();
+    const folders = this.app.vault
+      .getAllLoadedFiles()
+      .filter((f): f is TFolder => f instanceof TFolder && f.path !== "/" && f.path.toLowerCase().includes(q));
+    return folders.sort((a, b) => a.path.localeCompare(b.path)).slice(0, 50);
+  }
+
+  renderSuggestion(folder: TFolder, el: HTMLElement): void {
+    el.setText(folder.path);
+  }
+
+  selectSuggestion(folder: TFolder): void {
+    this.input.value = folder.path;
+    this.onPick(folder.path);
+    this.close();
+  }
+}
 
 export interface CaptureSettings {
   words: boolean;
@@ -74,19 +99,33 @@ export class ContextsSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Excluded folders")
-      .setDesc("One folder path per line. Nothing inside these folders is ever recorded.")
-      .addTextArea((ta) =>
-        ta
-          .setPlaceholder("00_personal\nTemplates")
-          .setValue(this.plugin.settings.excludedFolders.join("\n"))
-          .onChange(async (v) => {
-            this.plugin.settings.excludedFolders = v
-              .split("\n")
-              .map((s) => s.trim().replace(/\/+$/, ""))
-              .filter(Boolean);
-            await this.plugin.saveSettings();
-          })
+      .setDesc("Nothing inside these folders is ever recorded.")
+      .addButton((b) =>
+        b.setButtonText("Add folder").onClick(async () => {
+          this.plugin.settings.excludedFolders.push("");
+          await this.plugin.saveSettings();
+          this.display();
+        })
       );
+
+    this.plugin.settings.excludedFolders.forEach((folder, i) => {
+      const save = async (v: string) => {
+        this.plugin.settings.excludedFolders[i] = v.trim().replace(/\/+$/, "");
+        await this.plugin.saveSettings();
+      };
+      new Setting(containerEl)
+        .addSearch((search) => {
+          search.setPlaceholder("Folder path").setValue(folder).onChange(save);
+          new FolderSuggest(this.app, search.inputEl, (path) => void save(path));
+        })
+        .addExtraButton((b) =>
+          b.setIcon("trash").setTooltip("Remove").onClick(async () => {
+            this.plugin.settings.excludedFolders.splice(i, 1);
+            await this.plugin.saveSettings();
+            this.display();
+          })
+        );
+    });
 
     new Setting(containerEl).setName("Capture").setHeading()
       .setDesc("Everything is on by default. Turning a signal off skips its work entirely; it stops being recorded from that moment on.");

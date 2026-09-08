@@ -1,6 +1,7 @@
 import { App, MarkdownView, Modal, Plugin, TFile, getAllTags } from "obsidian";
 import { EventLog, getDeviceId } from "./log";
 import { LogEvent, Recorder, Snapshot, extractFootnotes, extractHighlights, isSpan } from "./recorder";
+import { applyRenames, groupSessions, relatedTo } from "./views";
 
 export default class ContextsPlugin extends Plugin {
   private recorder = new Recorder();
@@ -94,14 +95,32 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = await this.log.readAll();
+    const events = applyRenames(await this.log.readAll());
+    if (!events.length) {
+      new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
+      return;
+    }
     const spans = events.filter(isSpan);
     const files = new Set(spans.map((s) => s.path));
-    const header = events.length
-      ? `${events.length} events · ${files.size} files · since ${fmtTime(events[0].t)}\n\n`
-      : "No events recorded yet. Work in some notes and come back.";
+    const sessions = groupSessions(events);
+    const header = `${events.length} events · ${files.size} files · ${sessions.length} sessions · since ${fmtTime(events[0].t)}\n`;
+
+    let related = "";
+    const activePath = this.recorder.activePath;
+    if (activePath) {
+      const top = relatedTo(activePath, sessions, Date.now()).slice(0, 10);
+      if (top.length) {
+        related =
+          `\nRelated to ${activePath}:\n` +
+          top
+            .map((r) => `  ${r.score.toFixed(2)}  ${r.path}  (${r.sharedSessions} shared, last ${fmtTime(r.lastAt)})`)
+            .join("\n") +
+          "\n";
+      }
+    }
+
     const body = events.slice(-100).reverse().map(fmtEvent).join("\n");
-    new HistoryModal(this.app, header + body).open();
+    new HistoryModal(this.app, header + related + "\n" + body).open();
   }
 }
 

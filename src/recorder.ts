@@ -122,6 +122,7 @@ export function isSpan(ev: LogEvent): ev is SpanEvent {
 }
 
 // ponytail: spans shorter than this are navigation flicks, not engagement.
+// A span that changed the file is exempt: a one-second edit is still an edit.
 export const MIN_SPAN_MS = 2000;
 
 function diffList(before: string[], after: string[]): [string[], string[]] {
@@ -191,13 +192,11 @@ export class Recorder {
     this.current = null;
     if (!cur) return null;
     const dur = end - cur.start;
-    if (dur < MIN_SPAN_MS) return null;
+    const edit = after ? diffSnapshots(cur.snap, after) : undefined;
+    if (dur < MIN_SPAN_MS && !edit) return null;
     const ev: SpanEvent = { t: end, path: cur.path, start: cur.start, dur };
     if (cur.ctime !== undefined) ev.ctime = cur.ctime;
-    if (after) {
-      const edit = diffSnapshots(cur.snap, after);
-      if (edit) ev.edit = edit;
-    }
+    if (edit) ev.edit = edit;
     return ev;
   }
 

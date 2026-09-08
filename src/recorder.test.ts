@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  Recorder,
   Snapshot,
   diffSnapshots,
   extractFootnotes,
@@ -66,5 +67,21 @@ describe("diffSnapshots", () => {
   it("reports formatting and word deltas", () => {
     const d = diffSnapshots(snap({ words: 10, bold: 1 }), snap({ words: 14, bold: 3, italic: 1 }));
     expect(d).toEqual({ words: 4, bold: 2, italic: 1 });
+  });
+});
+
+describe("Recorder minimum span", () => {
+  it("drops a sub-minimum span with no edit", () => {
+    const r = new Recorder();
+    r.activate("A.md", snap({ words: 10 }), 0);
+    expect(r.deactivate(snap({ words: 10 }), 1000)).toBeNull();
+  });
+
+  it("keeps a sub-minimum span that changed the file", () => {
+    const r = new Recorder();
+    r.activate("A.md", snap({ words: 10 }), 0);
+    const ev = r.deactivate(snap({ words: 7 }), 1000);
+    expect(ev?.edit).toEqual({ words: -3 });
+    expect(ev?.dur).toBe(1000);
   });
 });

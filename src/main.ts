@@ -235,10 +235,27 @@ export default class ContextsPlugin extends Plugin {
     if (ev) await this.record(ev);
   }
 
+  /**
+   * The file's current text, preferring the live editor buffer over disk.
+   * cachedRead returns what's saved; edits made in the last moments before
+   * tabbing away may not be flushed yet, and the trailing autosave is then
+   * suppressed by the deactivation grace window — so a disk read at close
+   * silently loses final-second edits.
+   */
+  private liveContent(file: TFile): string | null {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.file?.path === file.path) return view.editor.getValue();
+    }
+    return null;
+  }
+
   /** Disabled capture signals are skipped entirely, not computed and discarded. */
   private async snapshot(file: TFile): Promise<Snapshot> {
     const c = this.settings.capture;
-    const content = await this.app.vault.cachedRead(file);
+    // ponytail: cache-derived fields (links/tags/headings/frontmatter) still lag
+    // behind unsaved keystrokes; parsing them from content is the upgrade path.
+    const content = this.liveContent(file) ?? (await this.app.vault.cachedRead(file));
     const cache = this.app.metadataCache.getFileCache(file);
     const fmt = c.formatting ? extractFormatting(content) : { bold: 0, italic: 0 };
     const fm: Record<string, string> = {};

@@ -37,6 +37,13 @@ export interface CaptureSettings {
   urls: boolean;
   blockIds: boolean;
   section: boolean;
+  callouts: boolean;
+  comments: boolean;
+  strikethrough: boolean;
+  code: boolean;
+  math: boolean;
+  tables: boolean;
+  canvas: boolean;
   formatting: boolean;
   frontmatter: boolean;
   ctime: boolean;
@@ -65,6 +72,13 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
     urls: true,
     blockIds: true,
     section: true,
+    callouts: true,
+    comments: true,
+    strikethrough: true,
+    code: true,
+    math: true,
+    tables: true,
+    canvas: true,
     formatting: true,
     frontmatter: true,
     ctime: true,
@@ -89,6 +103,13 @@ const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
   urls: ["External links", "Web URLs added or removed — when a resource entered which note."],
   blockIds: ["Block IDs", "^block-ids added or removed — the moment a passage becomes citable."],
   section: ["Section attention", "Which heading section the cursor was in when a visit ended."],
+  callouts: ["Callouts", "Callouts added or removed, by type and title."],
+  comments: ["Comments", "%%comments%% added or removed, text clipped. These are private annotations; the log syncs with your vault."],
+  strikethrough: ["Strikethrough", "~~Struck~~ text added or removed — striking is a judgment act."],
+  code: ["Code blocks", "Fenced block count and which languages appear."],
+  math: ["Math", "Net change in LaTeX math regions."],
+  tables: ["Tables", "Net change in table count."],
+  canvas: ["Canvas files", "Activation spans for .canvas files (no content deltas)."],
   formatting: ["Bold and italics", "Net change in bold and italic emphasis counts."],
   frontmatter: ["Frontmatter fields", "Which frontmatter keys changed, with their before and after values."],
   ctime: ["Creation time", "Stamp each span with the file's creation time, the anchor for healing renames made outside Obsidian."],

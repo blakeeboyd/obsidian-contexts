@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   Recorder,
+  countMath,
+  countTables,
   extractBlockIds,
+  extractCallouts,
+  extractCode,
+  extractComments,
   extractRefs,
+  extractStruck,
   sectionAtLine,
   Snapshot,
   diffSnapshots,
@@ -31,6 +37,13 @@ function snap(partial: Partial<Snapshot> = {}): Snapshot {
     tasksOpen: [],
     tasksDone: [],
     urls: [],
+    callouts: [],
+    comments: [],
+    struck: [],
+    codeLangs: [],
+    codeBlocks: 0,
+    math: 0,
+    tables: 0,
     bold: 0,
     italic: 0,
     fm: {},
@@ -114,6 +127,20 @@ describe("extractors", () => {
   it("diffs URLs into added and removed", () => {
     const d = diffSnapshots(snap({ urls: ["https://old.com"] }), snap({ urls: ["https://new.com"] }));
     expect(d).toEqual({ urlsAdded: ["https://new.com"], urlsRemoved: ["https://old.com"] });
+  });
+
+  it("finds callouts, comments, and struck text", () => {
+    const text = "> [!question]- Question 1: What?\n\n%%private note%%\n\nthis is ~~rejected~~ kept";
+    expect(extractCallouts(text)).toEqual(["question: Question 1: What?"]);
+    expect(extractComments(text)).toEqual(["private note"]);
+    expect(extractStruck(text)).toEqual(["rejected"]);
+  });
+
+  it("counts code blocks with languages, math, and tables", () => {
+    const text = "```js\ncode\n```\n\n```\nplain\n```\n\n$$x^2$$ and $y$\n\n| a | b |\n| --- | --- |\n| 1 | 2 |";
+    expect(extractCode(text)).toEqual({ count: 2, langs: ["js"] });
+    expect(countMath(text)).toBe(2);
+    expect(countTables(text)).toBe(1);
   });
 
   it("counts bold and italic without conflating them", () => {

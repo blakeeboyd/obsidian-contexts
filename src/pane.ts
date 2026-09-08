@@ -480,6 +480,12 @@ export class ContextsPane extends ItemView {
     if (e.urlsAdded || e.urlsRemoved) chip("globe", pm(e.urlsAdded, e.urlsRemoved), "external links");
     if (e.embedsAdded || e.embedsRemoved) chip("layers", pm(e.embedsAdded, e.embedsRemoved), "embeds");
     if (e.blockIdsAdded || e.blockIdsRemoved) chip("anchor", pm(e.blockIdsAdded, e.blockIdsRemoved), "block IDs");
+    if (e.calloutsAdded || e.calloutsRemoved) chip("info", pm(e.calloutsAdded, e.calloutsRemoved), "callouts");
+    if (e.commentsAdded || e.commentsRemoved) chip("percent", pm(e.commentsAdded, e.commentsRemoved), "comments");
+    if (e.struckAdded || e.struckRemoved) chip("strikethrough", pm(e.struckAdded, e.struckRemoved), "strikethrough");
+    if (e.codeBlocks || e.codeLangsAdded || e.codeLangsRemoved) chip("code", num(e.codeBlocks ?? 0), "code blocks");
+    if (e.math) chip("sigma", num(e.math), "math");
+    if (e.tables) chip("table", num(e.tables), "tables");
     if (e.bold) chip("bold", num(e.bold), "bold");
     if (e.italic) chip("italic", num(e.italic), "italic");
     if (e.fmChanged) {

@@ -14,9 +14,16 @@ import {
   extractFootnotes,
   extractFormatting,
   extractHeadings,
+  countMath,
+  countTables,
+  emptySnapshot,
   extractBlockIds,
+  extractCallouts,
+  extractCode,
+  extractComments,
   extractHighlights,
   extractRefs,
+  extractStruck,
   extractTags,
   extractTasks,
   extractUrls,
@@ -365,12 +372,20 @@ export default class ContextsPlugin extends Plugin {
   /** The active leaf changed: close the previous span, open one for the new file (markdown only). */
   private async onActiveChange(): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const file = view?.file && view.file.extension === "md" ? view.file : null;
+    let file = view?.file && view.file.extension === "md" ? view.file : null;
     if (file) this.lastActiveMdPath = file.path;
+    // Canvas files get bare activation spans: presence tracked, never diffed.
+    if (!file && this.settings.capture.canvas) {
+      const lv = this.app.workspace.getMostRecentLeaf()?.view;
+      if (lv?.getViewType() === "canvas") {
+        const cf = (lv as unknown as { file?: TFile }).file;
+        if (cf instanceof TFile) file = cf;
+      }
+    }
     if ((file?.path ?? null) === this.recorder.activePath) return;
     await this.closeSpan();
     if (file && this.tracked(file.path)) {
-      const snap = await this.snapshot(file, false);
+      const snap = file.extension === "md" ? await this.snapshot(file, false) : emptySnapshot();
       // A file with no history predates the record: log its baseline once.
       // Files created while recording already have a create event, so they skip this.
       if (!(await this.isKnown(file.path))) {
@@ -409,7 +424,7 @@ export default class ContextsPlugin extends Plugin {
     // leaf, they didn't switch away from it — they closed it.
     if (left === "switch" && !this.isOpenAnywhere(path)) left = "close";
     const file = this.app.vault.getAbstractFileByPath(path);
-    const after = file instanceof TFile ? await this.snapshot(file, true) : null;
+    const after = file instanceof TFile && file.extension === "md" ? await this.snapshot(file, true) : null;
     const section = file instanceof TFile && this.settings.capture.section ? this.activeSection(file) : undefined;
     const ev = this.recorder.deactivate(after, end ?? Date.now(), left, section);
     this.recentDeact.set(path, Date.now());
@@ -428,9 +443,12 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private isOpenAnywhere(path: string): boolean {
-    return this.app.workspace
-      .getLeavesOfType("markdown")
-      .some((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === path);
+    for (const type of ["markdown", "canvas"]) {
+      for (const leaf of this.app.workspace.getLeavesOfType(type)) {
+        if ((leaf.view as unknown as { file?: TFile }).file?.path === path) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -473,6 +491,7 @@ export default class ContextsPlugin extends Plugin {
       for (const [k, v] of Object.entries(fmRaw)) fm[k] = JSON.stringify(v) ?? "";
     }
     const refs = c.links ? extractRefs(body) : { links: [], embeds: [] };
+    const code = c.code ? extractCode(content) : { count: 0, langs: [] };
     return {
       words: c.words ? content.split(/\s+/).filter(Boolean).length : 0,
       links: refs.links,
@@ -485,6 +504,13 @@ export default class ContextsPlugin extends Plugin {
       tasksOpen: tasks.open,
       tasksDone: tasks.done,
       urls: c.urls ? extractUrls(content) : [],
+      callouts: c.callouts ? extractCallouts(content) : [],
+      comments: c.comments ? extractComments(content) : [],
+      struck: c.strikethrough ? extractStruck(content) : [],
+      codeLangs: code.langs,
+      codeBlocks: code.count,
+      math: c.math ? countMath(body) : 0,
+      tables: c.tables ? countTables(body) : 0,
       bold: fmt.bold,
       italic: fmt.italic,
       fm,

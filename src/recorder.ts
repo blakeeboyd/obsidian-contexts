@@ -20,6 +20,13 @@ export interface Snapshot {
   tasksOpen: string[];
   tasksDone: string[];
   urls: string[];
+  callouts: string[];
+  comments: string[];
+  struck: string[];
+  codeLangs: string[];
+  codeBlocks: number;
+  math: number;
+  tables: number;
   bold: number;
   italic: number;
   fm: Record<string, string>; // frontmatter, values pre-stringified for cheap compare
@@ -52,6 +59,17 @@ export interface EditDelta {
   embedsRemoved?: string[];
   blockIdsAdded?: string[];
   blockIdsRemoved?: string[];
+  calloutsAdded?: string[];
+  calloutsRemoved?: string[];
+  commentsAdded?: string[];
+  commentsRemoved?: string[];
+  struckAdded?: string[];
+  struckRemoved?: string[];
+  codeLangsAdded?: string[];
+  codeLangsRemoved?: string[];
+  codeBlocks?: number; // net count changes
+  math?: number;
+  tables?: number;
   bold?: number; // net count change
   italic?: number;
   /** Frontmatter changes: key → [before, after] (null = absent). Pre-2026-09-08 logs hold a bare key list. */
@@ -97,6 +115,89 @@ export function extractRefs(content: string): { links: string[]; embeds: string[
 export function extractLinks(content: string): string[] {
   const { links, embeds } = extractRefs(content);
   return [...links, ...embeds];
+}
+
+/** Callouts as "type: title" identifiers ([!question] Question 1 → "question: Question 1"). */
+export function extractCallouts(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/^>\s*\[!([\w-]+)\][+-]?[ \t]*(.*)$/gm)) {
+    out.push(clip(`${m[1].toLowerCase()}: ${m[2]}`.replace(/:\s*$/, "")));
+  }
+  return out;
+}
+
+/** Obsidian %%comments%% — private annotations, clipped like highlights. */
+export function extractComments(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/%%([\s\S]*?)%%/g)) {
+    const t = m[1].trim();
+    if (t) out.push(clip(t));
+  }
+  return out;
+}
+
+/** ~~struck~~ text: striking is a judgment act, kin to task completion. */
+export function extractStruck(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/~~([^~\n]+)~~/g)) out.push(clip(m[1]));
+  return out;
+}
+
+/** Fenced code blocks: how many, and which languages appear. */
+export function extractCode(content: string): { count: number; langs: string[] } {
+  let count = 0;
+  const langs = new Set<string>();
+  let inFence = false;
+  for (const line of content.split("\n")) {
+    const m = line.match(/^[ \t]*(?:```|~~~)[ \t]*(\S*)/);
+    if (!m) continue;
+    if (!inFence) {
+      count++;
+      if (m[1]) langs.add(m[1].toLowerCase());
+    }
+    inFence = !inFence;
+  }
+  return { count, langs: [...langs] };
+}
+
+/** LaTeX math regions: $$blocks$$ plus $inline$. Net count only. */
+export function countMath(content: string): number {
+  const blocks = content.match(/\$\$[\s\S]+?\$\$/g) ?? [];
+  const stripped = content.replace(/\$\$[\s\S]+?\$\$/g, "");
+  const inline = stripped.match(/\$[^$\n]+\$/g) ?? [];
+  return blocks.length + inline.length;
+}
+
+/** Markdown tables, counted by their separator rows. */
+export function countTables(content: string): number {
+  return (content.match(/^[ \t]*\|?[ \t:|-]*-[ \t:|-]*\|[ \t:|-]*$/gm) ?? []).length;
+}
+
+/** All-zero snapshot for files we track but never diff (canvas). */
+export function emptySnapshot(): Snapshot {
+  return {
+    words: 0,
+    links: [],
+    embeds: [],
+    blockIds: [],
+    tags: [],
+    headings: [],
+    highlights: [],
+    footnotes: [],
+    tasksOpen: [],
+    tasksDone: [],
+    urls: [],
+    callouts: [],
+    comments: [],
+    struck: [],
+    codeLangs: [],
+    codeBlocks: 0,
+    math: 0,
+    tables: 0,
+    bold: 0,
+    italic: 0,
+    fm: {},
+  };
 }
 
 /**
@@ -378,6 +479,21 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   const [idsAdded, idsRemoved] = diffList(before.blockIds, after.blockIds);
   if (idsAdded.length) delta.blockIdsAdded = idsAdded;
   if (idsRemoved.length) delta.blockIdsRemoved = idsRemoved;
+  const [coAdded, coRemoved] = diffList(before.callouts, after.callouts);
+  if (coAdded.length) delta.calloutsAdded = coAdded;
+  if (coRemoved.length) delta.calloutsRemoved = coRemoved;
+  const [cmAdded, cmRemoved] = diffList(before.comments, after.comments);
+  if (cmAdded.length) delta.commentsAdded = cmAdded;
+  if (cmRemoved.length) delta.commentsRemoved = cmRemoved;
+  const [stAdded, stRemoved] = diffList(before.struck, after.struck);
+  if (stAdded.length) delta.struckAdded = stAdded;
+  if (stRemoved.length) delta.struckRemoved = stRemoved;
+  const [clAdded, clRemoved] = diffList(before.codeLangs, after.codeLangs);
+  if (clAdded.length) delta.codeLangsAdded = clAdded;
+  if (clRemoved.length) delta.codeLangsRemoved = clRemoved;
+  for (const k of ["codeBlocks", "math", "tables"] as const) {
+    if (after[k] !== before[k]) delta[k] = after[k] - before[k];
+  }
   if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
   if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
   const fmChanged: Record<string, [string | null, string | null]> = {};

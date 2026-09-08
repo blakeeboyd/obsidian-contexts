@@ -68,6 +68,17 @@ export function fmtDelta(e: EditDelta): string {
     parts.push(`embeds +${e.embedsAdded?.length ?? 0}/-${e.embedsRemoved?.length ?? 0}`);
   if (e.blockIdsAdded || e.blockIdsRemoved)
     parts.push(`ids +${e.blockIdsAdded?.length ?? 0}/-${e.blockIdsRemoved?.length ?? 0}`);
+  if (e.calloutsAdded || e.calloutsRemoved)
+    parts.push(`callouts +${e.calloutsAdded?.length ?? 0}/-${e.calloutsRemoved?.length ?? 0}`);
+  if (e.commentsAdded || e.commentsRemoved)
+    parts.push(`comments +${e.commentsAdded?.length ?? 0}/-${e.commentsRemoved?.length ?? 0}`);
+  if (e.struckAdded || e.struckRemoved)
+    parts.push(`struck +${e.struckAdded?.length ?? 0}/-${e.struckRemoved?.length ?? 0}`);
+  if (e.codeLangsAdded || e.codeLangsRemoved)
+    parts.push(`langs +${e.codeLangsAdded?.length ?? 0}/-${e.codeLangsRemoved?.length ?? 0}`);
+  if (e.codeBlocks) parts.push(`code ${e.codeBlocks > 0 ? "+" : ""}${e.codeBlocks}`);
+  if (e.math) parts.push(`math ${e.math > 0 ? "+" : ""}${e.math}`);
+  if (e.tables) parts.push(`tables ${e.tables > 0 ? "+" : ""}${e.tables}`);
   if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
   if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
   if (e.fmChanged) {
@@ -103,6 +114,17 @@ export function fmtDeltaVerbose(e: EditDelta): string {
   if (e.embedsRemoved?.length) lines.push(`embeds removed: ${e.embedsRemoved.join(", ")}`);
   if (e.blockIdsAdded?.length) lines.push(`block ids added: ${e.blockIdsAdded.join(", ")}`);
   if (e.blockIdsRemoved?.length) lines.push(`block ids removed: ${e.blockIdsRemoved.join(", ")}`);
+  if (e.calloutsAdded?.length) lines.push(`callouts added: ${e.calloutsAdded.join(", ")}`);
+  if (e.calloutsRemoved?.length) lines.push(`callouts removed: ${e.calloutsRemoved.join(", ")}`);
+  if (e.commentsAdded?.length) lines.push(`comments added: ${e.commentsAdded.join(", ")}`);
+  if (e.commentsRemoved?.length) lines.push(`comments removed: ${e.commentsRemoved.join(", ")}`);
+  if (e.struckAdded?.length) lines.push(`struck: ${e.struckAdded.join(", ")}`);
+  if (e.struckRemoved?.length) lines.push(`unstruck: ${e.struckRemoved.join(", ")}`);
+  if (e.codeLangsAdded?.length) lines.push(`code languages added: ${e.codeLangsAdded.join(", ")}`);
+  if (e.codeLangsRemoved?.length) lines.push(`code languages removed: ${e.codeLangsRemoved.join(", ")}`);
+  if (e.codeBlocks) lines.push(`code blocks ${num(e.codeBlocks)}`);
+  if (e.math) lines.push(`math ${num(e.math)}`);
+  if (e.tables) lines.push(`tables ${num(e.tables)}`);
   if (e.bold) lines.push(`bold ${num(e.bold)}`);
   if (e.italic) lines.push(`italic ${num(e.italic)}`);
   if (e.fmChanged) {

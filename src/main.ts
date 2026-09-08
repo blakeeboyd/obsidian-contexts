@@ -12,6 +12,7 @@ import {
   extractHighlights,
   extractLinks,
   extractTags,
+  extractTasks,
   fmTagList,
   isSpan,
   stripCodeFences,
@@ -274,6 +275,7 @@ export default class ContextsPlugin extends Plugin {
     const body = stripCodeFences(content);
     const fmRaw = c.frontmatter || c.tags ? frontmatterOf(content) : {};
     const fmt = c.formatting ? extractFormatting(content) : { bold: 0, italic: 0 };
+    const tasks = c.tasks ? extractTasks(body) : { open: [], done: [] };
     const fm: Record<string, string> = {};
     if (c.frontmatter) {
       for (const [k, v] of Object.entries(fmRaw)) fm[k] = JSON.stringify(v) ?? "";
@@ -285,6 +287,8 @@ export default class ContextsPlugin extends Plugin {
       headings: c.headings ? extractHeadings(body) : [],
       highlights: c.highlights ? extractHighlights(content) : [],
       footnotes: c.footnotes ? extractFootnotes(content) : [],
+      tasksOpen: tasks.open,
+      tasksDone: tasks.done,
       bold: fmt.bold,
       italic: fmt.italic,
       fm,

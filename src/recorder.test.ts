@@ -7,6 +7,7 @@ import {
   extractFormatting,
   extractHeadings,
   extractHighlights,
+  extractTasks,
   extractLinks,
   extractTags,
   fmTagList,
@@ -21,6 +22,8 @@ function snap(partial: Partial<Snapshot> = {}): Snapshot {
     headings: [],
     highlights: [],
     footnotes: [],
+    tasksOpen: [],
+    tasksDone: [],
     bold: 0,
     italic: 0,
     fm: {},
@@ -59,6 +62,25 @@ describe("extractors", () => {
     const body = stripCodeFences(text);
     expect(extractHeadings(body)).toEqual(["Top", "Sub"]);
     expect(extractLinks(body)).toEqual([]);
+  });
+
+  it("finds tasks by status, including custom done markers", () => {
+    const text = "- [ ] call Nadia\n- [x] send syllabus\n- [/] half done\n1. [ ] numbered task\nnot - [ ] a task";
+    expect(extractTasks(text)).toEqual({
+      open: ["call Nadia", "numbered task"],
+      done: ["send syllabus", "half done"],
+    });
+  });
+
+  it("diffs tasks into added, completed, reopened, removed", () => {
+    const before = snap({ tasksOpen: ["a", "b", "c"], tasksDone: ["d"] });
+    const after = snap({ tasksOpen: ["a", "d"], tasksDone: ["b", "e"] });
+    expect(diffSnapshots(before, after)).toEqual({
+      tasksAdded: ["e"],
+      tasksCompleted: ["b"],
+      tasksReopened: ["d"],
+      tasksRemoved: ["c"],
+    });
   });
 
   it("counts bold and italic without conflating them", () => {

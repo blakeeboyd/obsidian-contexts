@@ -106,3 +106,25 @@
 .contexts-link:hover {
   text-decoration: underline;
 }
+
+.contexts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 8px;
+}
+
+.contexts-chip-icon {
+  display: inline-flex;
+}
+
+.contexts-chip-icon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.contexts-event-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}

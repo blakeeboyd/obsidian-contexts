@@ -1,6 +1,6 @@
-import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type { EditDelta } from "./recorder";
-import { fmtClock, fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
+import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { Session, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
@@ -87,7 +87,7 @@ export class ContextsPane extends ItemView {
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
         row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
-        if (ev.edit) row.createDiv({ text: fmtDelta(ev.edit), cls: "contexts-trail-delta" });
+        if (ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // Click to expand: every visit, chronological — time, length, what changed then.
         const details = row.createDiv({ cls: "contexts-trail-details" });
         details.createDiv({
@@ -116,12 +116,16 @@ export class ContextsPane extends ItemView {
         row.addClass("contexts-expandable");
         row.addEventListener("click", () => (details.hidden = !details.hidden));
       } else {
-        const label =
-          ev.type === "create" ? "created"
-          : ev.type === "delete" ? "deleted"
-          : ev.type === "extmod" ? "edited externally"
-          : "renamed";
-        row.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-trail-delta" });
+        const [icon, label] =
+          ev.type === "create" ? ["file-plus", "created"]
+          : ev.type === "delete" ? ["file-x", "deleted"]
+          : ev.type === "extmod" ? ["bot", "edited externally (AI, sync, script)"]
+          : ["arrow-right-left", "renamed"];
+        const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
+        line.createSpan({ text: `${fmtTime(ev.t)} · ` });
+        setIcon(line.createSpan({ cls: "contexts-chip-icon" }), icon);
+        line.setAttribute("title", label);
+        line.setAttribute("aria-label", label);
       }
     }
   }
@@ -148,6 +152,41 @@ export class ContextsPane extends ItemView {
       if (sess.files.length > FILES_PER_SESSION) {
         contentEl.createDiv({ text: `+${sess.files.length - FILES_PER_SESSION} more`, cls: "contexts-empty" });
       }
+    }
+  }
+
+  /**
+   * The collapsed scan layer: icon+count chips instead of words. Expansions
+   * keep full words — icons where you scan, prose where you read. Every chip
+   * carries a tooltip so the glyphs stay learnable.
+   */
+  private renderSummary(el: HTMLElement, e: EditDelta): void {
+    const chip = (icon: string, text: string, label: string) => {
+      const c = el.createSpan({ cls: "contexts-chip" });
+      setIcon(c.createSpan({ cls: "contexts-chip-icon" }), icon);
+      c.createSpan({ text });
+      c.setAttribute("title", label);
+      c.setAttribute("aria-label", label);
+    };
+    const pm = (a?: unknown[], r?: unknown[]) => `+${a?.length ?? 0}/-${r?.length ?? 0}`;
+    const num = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+    if (e.wordsAdded || e.wordsRemoved) chip("pencil", `+${e.wordsAdded ?? 0}/-${e.wordsRemoved ?? 0}`, "words");
+    else if (e.words) chip("pencil", num(e.words), "words");
+    if (e.linksAdded || e.linksRemoved) chip("link", pm(e.linksAdded, e.linksRemoved), "links");
+    if (e.tagsAdded || e.tagsRemoved) chip("tag", pm(e.tagsAdded, e.tagsRemoved), "tags");
+    if (e.headingsAdded || e.headingsRemoved) chip("heading", pm(e.headingsAdded, e.headingsRemoved), "headings");
+    else if (e.headingsChanged) chip("heading", "~", "headings reordered");
+    if (e.highlightsAdded || e.highlightsRemoved)
+      chip("highlighter", pm(e.highlightsAdded, e.highlightsRemoved), "highlights");
+    if (e.footnotesAdded || e.footnotesRemoved) chip("asterisk", pm(e.footnotesAdded, e.footnotesRemoved), "footnotes");
+    if (e.tasksAdded || e.tasksRemoved) chip("check-square", pm(e.tasksAdded, e.tasksRemoved), "tasks added/removed");
+    if (e.tasksCompleted) chip("check", `${e.tasksCompleted.length}`, "tasks completed");
+    if (e.tasksReopened) chip("undo-2", `${e.tasksReopened.length}`, "tasks reopened");
+    if (e.bold) chip("bold", num(e.bold), "bold");
+    if (e.italic) chip("italic", num(e.italic), "italic");
+    if (e.fmChanged) {
+      const n = Array.isArray(e.fmChanged) ? e.fmChanged.length : Object.keys(e.fmChanged).length;
+      chip("braces", `${n}`, "frontmatter fields");
     }
   }
 

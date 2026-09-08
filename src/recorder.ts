@@ -15,6 +15,8 @@ export interface Snapshot {
   headings: string[];
   highlights: string[];
   footnotes: string[];
+  tasksOpen: string[];
+  tasksDone: string[];
   bold: number;
   italic: number;
   fm: Record<string, string>; // frontmatter, values pre-stringified for cheap compare
@@ -37,6 +39,10 @@ export interface EditDelta {
   highlightsRemoved?: string[];
   footnotesAdded?: string[];
   footnotesRemoved?: string[];
+  tasksAdded?: string[];
+  tasksCompleted?: string[];
+  tasksReopened?: string[];
+  tasksRemoved?: string[];
   bold?: number; // net count change
   italic?: number;
   /** Frontmatter changes: key → [before, after] (null = absent). Pre-2026-09-08 logs hold a bare key list. */
@@ -84,6 +90,20 @@ export function fmTagList(fm: Record<string, unknown>): string[] {
   const raw = fm.tags ?? fm.tag;
   const arr = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
   return arr.map((t) => "#" + String(t).trim().replace(/^#/, "")).filter((t) => t !== "#");
+}
+
+/**
+ * Checkbox tasks by status: `[ ]` is open, any other status char ([x], [X],
+ * [/], [-], ...) counts as done. ponytail: editing a task's text reads as
+ * removed + added; custom statuses aren't distinguished from plain checks.
+ */
+export function extractTasks(content: string): { open: string[]; done: string[] } {
+  const open: string[] = [];
+  const done: string[] = [];
+  for (const m of content.matchAll(/^[ \t]*(?:[-*+]|\d+[.)])\s+\[(.)\]\s+(\S.*)$/gm)) {
+    (m[1] === " " ? open : done).push(clip(m[2]));
+  }
+  return { open, done };
 }
 
 export function extractHeadings(content: string): string[] {
@@ -200,6 +220,18 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   const [fnAdded, fnRemoved] = diffList(before.footnotes, after.footnotes);
   if (fnAdded.length) delta.footnotesAdded = fnAdded;
   if (fnRemoved.length) delta.footnotesRemoved = fnRemoved;
+  const beforeAll = new Set([...before.tasksOpen, ...before.tasksDone]);
+  const afterAll = new Set([...after.tasksOpen, ...after.tasksDone]);
+  const openBefore = new Set(before.tasksOpen);
+  const doneBefore = new Set(before.tasksDone);
+  const tasksAdded = [...afterAll].filter((t) => !beforeAll.has(t));
+  const tasksRemoved = [...beforeAll].filter((t) => !afterAll.has(t));
+  const tasksCompleted = after.tasksDone.filter((t) => openBefore.has(t));
+  const tasksReopened = after.tasksOpen.filter((t) => doneBefore.has(t));
+  if (tasksAdded.length) delta.tasksAdded = tasksAdded;
+  if (tasksCompleted.length) delta.tasksCompleted = tasksCompleted;
+  if (tasksReopened.length) delta.tasksReopened = tasksReopened;
+  if (tasksRemoved.length) delta.tasksRemoved = tasksRemoved;
   if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
   if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
   const fmChanged: Record<string, [string | null, string | null]> = {};

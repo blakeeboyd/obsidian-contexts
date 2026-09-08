@@ -48,6 +48,10 @@ export function fmtDelta(e: EditDelta): string {
     parts.push(`hl +${e.highlightsAdded?.length ?? 0}/-${e.highlightsRemoved?.length ?? 0}`);
   if (e.footnotesAdded || e.footnotesRemoved)
     parts.push(`fn +${e.footnotesAdded?.length ?? 0}/-${e.footnotesRemoved?.length ?? 0}`);
+  if (e.tasksAdded || e.tasksRemoved)
+    parts.push(`tasks +${e.tasksAdded?.length ?? 0}/-${e.tasksRemoved?.length ?? 0}`);
+  if (e.tasksCompleted) parts.push(`done ${e.tasksCompleted.length}`);
+  if (e.tasksReopened) parts.push(`reopened ${e.tasksReopened.length}`);
   if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
   if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
   if (e.fmChanged) {
@@ -73,6 +77,10 @@ export function fmtDeltaVerbose(e: EditDelta): string {
   if (e.headingsChanged) lines.push("headings reordered");
   list("highlights", e.highlightsAdded, e.highlightsRemoved);
   list("footnotes", e.footnotesAdded, e.footnotesRemoved);
+  if (e.tasksAdded?.length) lines.push(`tasks added: ${e.tasksAdded.join(", ")}`);
+  if (e.tasksCompleted?.length) lines.push(`tasks completed: ${e.tasksCompleted.join(", ")}`);
+  if (e.tasksReopened?.length) lines.push(`tasks reopened: ${e.tasksReopened.join(", ")}`);
+  if (e.tasksRemoved?.length) lines.push(`tasks removed: ${e.tasksRemoved.join(", ")}`);
   if (e.bold) lines.push(`bold ${num(e.bold)}`);
   if (e.italic) lines.push(`italic ${num(e.italic)}`);
   if (e.fmChanged) {

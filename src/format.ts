@@ -115,5 +115,7 @@ export function fmtEvent(ev: LogEvent): string {
   }
   const delta = ev.edit ? fmtDeltaVerbose(ev.edit).split("\n").join("; ") : "";
   const edit = delta ? `  (${delta})` : "";
-  return `${fmtTime(ev.start)}  ${fmtDur(ev.dur).padStart(5)}  ${ev.path}${edit}`;
+  const from = ev.from ? `  ← ${ev.from}` : "";
+  const left = ev.left && ev.left !== "switch" ? `  [${ev.left}]` : "";
+  return `${fmtTime(ev.start)}  ${fmtDur(ev.dur).padStart(5)}  ${ev.path}${from}${left}${edit}`;
 }

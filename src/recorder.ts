@@ -146,8 +146,12 @@ export interface SpanEvent {
   ctime?: number; // file creation time, the identity anchor for healing external renames
   /** The file this one was opened FROM via a clicked link — the user followed a connection. Absent = opened some other way. */
   from?: string;
+  /** How the visit ended. "switch" = went to another file; "close" = tab closed; "blur" = left the app; plus idle/quit/pause. */
+  left?: LeaveReason;
   edit?: EditDelta;
 }
+
+export type LeaveReason = "switch" | "close" | "blur" | "idle" | "quit" | "pause";
 
 /** Renames must be logged or a file's trail breaks permanently. */
 export interface RenameEvent {
@@ -304,16 +308,19 @@ export class Recorder {
    * Returns the event to log, or null if nothing was open or the span was
    * too short to count.
    */
-  deactivate(after: Snapshot | null, end: number): SpanEvent | null {
+  deactivate(after: Snapshot | null, end: number, left?: LeaveReason): SpanEvent | null {
     const cur = this.current;
     this.current = null;
     if (!cur) return null;
     const dur = end - cur.start;
     const edit = after ? diffSnapshots(cur.snap, after) : undefined;
-    if (dur < MIN_SPAN_MS && !edit) return null;
+    // A short glance is droppable; a glance that edited OR arrived via a
+    // followed link is behavior worth keeping.
+    if (dur < MIN_SPAN_MS && !edit && cur.from === undefined) return null;
     const ev: SpanEvent = { t: end, path: cur.path, start: cur.start, dur };
     if (cur.ctime !== undefined) ev.ctime = cur.ctime;
     if (cur.from !== undefined) ev.from = cur.from;
+    if (left) ev.left = left;
     if (edit) ev.edit = edit;
     return ev;
   }

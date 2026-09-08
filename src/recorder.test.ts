@@ -133,6 +133,19 @@ describe("Recorder link provenance", () => {
     r.activate("B.md", snap(), 0);
     expect(r.deactivate(snap(), 5000)?.from).toBeUndefined();
   });
+
+  it("keeps a sub-minimum glance that arrived via a link", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0, undefined, "A.md");
+    const ev = r.deactivate(snap(), 1000);
+    expect(ev?.from).toBe("A.md");
+  });
+
+  it("records how the visit ended", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0);
+    expect(r.deactivate(snap(), 5000, "blur")?.left).toBe("blur");
+  });
 });
 
 describe("Recorder minimum span", () => {

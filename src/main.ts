@@ -3,6 +3,7 @@ import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
 import {
+  LeaveReason,
   LogEvent,
   Recorder,
   Snapshot,
@@ -73,7 +74,7 @@ export default class ContextsPlugin extends Plugin {
       );
       // App loses/regains focus: close the span so time in other apps is not
       // counted as engagement, reopen it on return.
-      this.registerDomEvent(window, "blur", () => this.enqueue(() => this.closeSpan()));
+      this.registerDomEvent(window, "blur", () => this.enqueue(() => this.closeSpan(undefined, "blur")));
       this.registerDomEvent(window, "focus", () => this.enqueue(() => this.onActiveChange()));
 
       // Activity signals for idle detection: cheap assignments, nothing more.
@@ -140,7 +141,7 @@ export default class ContextsPlugin extends Plugin {
   setPaused(v: boolean): void {
     if (this.settings.paused === v) return;
     this.settings.paused = v;
-    this.enqueue(() => (v ? this.closeSpan() : this.onActiveChange()));
+    this.enqueue(() => (v ? this.closeSpan(undefined, "pause") : this.onActiveChange()));
     void this.saveSettings();
   }
 
@@ -185,7 +186,7 @@ export default class ContextsPlugin extends Plugin {
   onunload() {
     // Fire-and-forget: usually completes before the process is gone, and the
     // reader survives a truncated final line if it doesn't.
-    this.enqueue(() => this.closeSpan());
+    this.enqueue(() => this.closeSpan(undefined, "quit"));
   }
 
   async saveSettings() {
@@ -238,7 +239,7 @@ export default class ContextsPlugin extends Plugin {
     if (Date.now() - this.lastActivity < timeoutMs) return;
     this.idleClosed = true;
     const end = this.lastActivity;
-    this.enqueue(() => this.closeSpan(end));
+    this.enqueue(() => this.closeSpan(end, "idle"));
   }
 
   private onModify(file: unknown): void {
@@ -289,14 +290,23 @@ export default class ContextsPlugin extends Plugin {
     this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
   }
 
-  private async closeSpan(end?: number): Promise<void> {
+  private async closeSpan(end?: number, left: LeaveReason = "switch"): Promise<void> {
     const path = this.recorder.activePath;
     if (!path) return;
+    // "switch" means the user moved on; if the file is no longer open in any
+    // leaf, they didn't switch away from it — they closed it.
+    if (left === "switch" && !this.isOpenAnywhere(path)) left = "close";
     const file = this.app.vault.getAbstractFileByPath(path);
     const after = file instanceof TFile ? await this.snapshot(file, true) : null;
-    const ev = this.recorder.deactivate(after, end ?? Date.now());
+    const ev = this.recorder.deactivate(after, end ?? Date.now(), left);
     this.recentDeact.set(path, Date.now());
     if (ev) await this.record(ev);
+  }
+
+  private isOpenAnywhere(path: string): boolean {
+    return this.app.workspace
+      .getLeavesOfType("markdown")
+      .some((leaf) => leaf.view instanceof MarkdownView && leaf.view.file?.path === path);
   }
 
   /**

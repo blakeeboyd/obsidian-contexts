@@ -99,6 +99,7 @@ export class ContextsPane extends ItemView {
             const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
             if (span.from) this.viaLine(deltaEl, span.from);
             this.renderDelta(deltaEl, span.edit, path);
+            this.leftLine(deltaEl, span.left);
             i++;
           } else {
             // Consecutive read-only visits collapse to one line; they're context, not content.
@@ -109,6 +110,7 @@ export class ContextsPane extends ItemView {
             const readEl = line.createDiv({ cls: "contexts-span-read" });
             readEl.createSpan({ text: j - i > 1 ? `read ×${j - i}` : "read" });
             if (span.from) this.viaLine(readEl, span.from);
+            this.leftLine(readEl, visits[j - 1].left);
             i = j;
           }
         }
@@ -240,6 +242,19 @@ export class ContextsPane extends ItemView {
       const n = Array.isArray(e.fmChanged) ? e.fmChanged.length : Object.keys(e.fmChanged).length;
       chip("braces", `${n}`, "frontmatter fields");
     }
+  }
+
+  /** How the visit ended — shown only when it wasn't a plain switch to another file. */
+  private leftLine(el: HTMLElement, left?: string): void {
+    if (!left || left === "switch") return;
+    const label =
+      left === "close" ? "closed the file"
+      : left === "blur" ? "left the app"
+      : left === "idle" ? "went idle"
+      : left === "quit" ? "quit Obsidian"
+      : left === "pause" ? "recording paused"
+      : left;
+    el.createDiv({ text: label, cls: "contexts-via" });
   }
 
   /** "via link from X": this visit began by clicking a link in X. The name opens that file. */

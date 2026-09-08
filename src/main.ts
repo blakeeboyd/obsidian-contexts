@@ -1,5 +1,7 @@
 import { App, MarkdownView, Modal, Plugin, TFile, getAllTags } from "obsidian";
+import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
+import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
 import {
   LogEvent,
   Recorder,
@@ -21,6 +23,8 @@ const IDLE_CHECK_MS = 60_000;
 
 export default class ContextsPlugin extends Plugin {
   settings: ContextsSettings = DEFAULT_SETTINGS;
+  /** The last markdown file that was active; sticky while focus is in a sidebar. */
+  lastActiveMdPath: string | null = null;
   private recorder = new Recorder();
   private log!: EventLog;
   // Serializes all recorder/log operations so async snapshots never interleave.
@@ -29,6 +33,8 @@ export default class ContextsPlugin extends Plugin {
   private idleClosed = false;
   private recentDeact = new Map<string, number>();
   private lastExtmod = new Map<string, number>();
+  // In-memory copy of the log so views never wait on file IO after first load.
+  private events: LogEvent[] | null = null;
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -36,6 +42,14 @@ export default class ContextsPlugin extends Plugin {
     this.addSettingTab(new ContextsSettingTab(this.app, this));
 
     this.log = new EventLog(this.app.vault.adapter, `${this.manifest.dir}/log`, getDeviceId());
+
+    this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
+    this.addRibbonIcon("footprints", "Open Contexts pane", () => void this.activatePane());
+    this.addCommand({
+      id: "open-pane",
+      name: "Open pane",
+      callback: () => void this.activatePane(),
+    });
 
     this.app.workspace.onLayoutReady(() => {
       this.registerEvent(
@@ -59,7 +73,7 @@ export default class ContextsPlugin extends Plugin {
       this.registerEvent(
         this.app.vault.on("create", (file) => {
           if (file instanceof TFile && file.extension === "md" && this.settings.capture.externalEdits) {
-            this.enqueue(() => this.log.append({ t: Date.now(), type: "create", path: file.path }));
+            this.enqueue(() => this.record({ t: Date.now(), type: "create", path: file.path }));
           }
         })
       );
@@ -74,7 +88,8 @@ export default class ContextsPlugin extends Plugin {
       this.app.vault.on("rename", (file, oldPath) => {
         if (file instanceof TFile && file.extension === "md") {
           this.recorder.handleRename(oldPath, file.path);
-          this.enqueue(() => this.log.append({ t: Date.now(), type: "rename", from: oldPath, to: file.path }));
+          if (this.lastActiveMdPath === oldPath) this.lastActiveMdPath = file.path;
+          this.enqueue(() => this.record({ t: Date.now(), type: "rename", from: oldPath, to: file.path }));
         }
       })
     );
@@ -83,7 +98,7 @@ export default class ContextsPlugin extends Plugin {
       this.app.vault.on("delete", (file) => {
         if (file instanceof TFile && file.extension === "md") {
           if (this.recorder.activePath === file.path) this.recorder.abandon();
-          this.enqueue(() => this.log.append({ t: Date.now(), type: "delete", path: file.path }));
+          this.enqueue(() => this.record({ t: Date.now(), type: "delete", path: file.path }));
         }
       })
     );
@@ -103,6 +118,33 @@ export default class ContextsPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.refreshPane();
+  }
+
+  /** The full event history (all devices' shards), loaded once and kept current in memory. */
+  async getEvents(): Promise<LogEvent[]> {
+    if (!this.events) this.events = await this.log.readAll();
+    return this.events;
+  }
+
+  private async record(ev: LogEvent): Promise<void> {
+    this.events?.push(ev);
+    await this.log.append(ev);
+    this.refreshPane();
+  }
+
+  private refreshPane(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)) {
+      void (leaf.view as ContextsPane).render();
+    }
+  }
+
+  private async activatePane(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)[0];
+    const leaf = existing ?? this.app.workspace.getRightLeaf(false);
+    if (!leaf) return;
+    if (!existing) await leaf.setViewState({ type: CONTEXTS_VIEW_TYPE, active: true });
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   private enqueue(op: () => Promise<void>): void {
@@ -138,19 +180,21 @@ export default class ContextsPlugin extends Plugin {
     if (now - (this.recentDeact.get(file.path) ?? 0) < RECENT_DEACT_GRACE_MS) return;
     if (now - (this.lastExtmod.get(file.path) ?? 0) < EXTMOD_COALESCE_MS) return;
     this.lastExtmod.set(file.path, now);
-    this.enqueue(() => this.log.append({ t: now, type: "extmod", path: file.path }));
+    this.enqueue(() => this.record({ t: now, type: "extmod", path: file.path }));
   }
 
   /** The active leaf changed: close the previous span, open one for the new file (markdown only). */
   private async onActiveChange(): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const file = view?.file && view.file.extension === "md" ? view.file : null;
+    if (file) this.lastActiveMdPath = file.path;
     if ((file?.path ?? null) === this.recorder.activePath) return;
     await this.closeSpan();
     if (file) {
       const snap = await this.snapshot(file);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime);
+      this.refreshPane();
     }
   }
 
@@ -161,7 +205,7 @@ export default class ContextsPlugin extends Plugin {
     const after = file instanceof TFile ? await this.snapshot(file) : null;
     const ev = this.recorder.deactivate(after, end ?? Date.now());
     this.recentDeact.set(path, Date.now());
-    if (ev) await this.log.append(ev);
+    if (ev) await this.record(ev);
   }
 
   /** Disabled capture signals are skipped entirely, not computed and discarded. */
@@ -190,7 +234,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = applyRenames(await this.log.readAll());
+    const events = applyRenames(await this.getEvents());
     if (!events.length) {
       new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
       return;
@@ -218,50 +262,6 @@ export default class ContextsPlugin extends Plugin {
     const body = events.slice(-100).reverse().map(fmtEvent).join("\n");
     new HistoryModal(this.app, header + related + "\n" + body).open();
   }
-}
-
-function fmtTime(t: number): string {
-  const d = new Date(t);
-  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
-}
-
-function fmtDur(ms: number): string {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h${m % 60}m`;
-}
-
-function fmtEvent(ev: LogEvent): string {
-  if (!isSpan(ev)) {
-    const desc =
-      ev.type === "rename" ? `renamed: ${ev.from} → ${ev.to}`
-      : ev.type === "delete" ? `deleted: ${ev.path}`
-      : ev.type === "create" ? `created: ${ev.path}`
-      : `external edit: ${ev.path}`;
-    return `${fmtTime(ev.t)}           ${desc}`;
-  }
-  const parts: string[] = [];
-  const e = ev.edit;
-  if (e) {
-    if (e.words) parts.push(`${e.words > 0 ? "+" : ""}${e.words}w`);
-    if (e.linksAdded || e.linksRemoved)
-      parts.push(`links +${e.linksAdded?.length ?? 0}/-${e.linksRemoved?.length ?? 0}`);
-    if (e.tagsAdded || e.tagsRemoved)
-      parts.push(`tags +${e.tagsAdded?.length ?? 0}/-${e.tagsRemoved?.length ?? 0}`);
-    if (e.headingsChanged) parts.push("headings");
-    if (e.highlightsAdded || e.highlightsRemoved)
-      parts.push(`hl +${e.highlightsAdded?.length ?? 0}/-${e.highlightsRemoved?.length ?? 0}`);
-    if (e.footnotesAdded || e.footnotesRemoved)
-      parts.push(`fn +${e.footnotesAdded?.length ?? 0}/-${e.footnotesRemoved?.length ?? 0}`);
-    if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
-    if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
-    if (e.fmChanged) parts.push(`fm: ${e.fmChanged.join(",")}`);
-  }
-  const edit = parts.length ? `  (${parts.join(", ")})` : "";
-  return `${fmtTime(ev.start)}  ${fmtDur(ev.dur).padStart(5)}  ${ev.path}${edit}`;
 }
 
 class HistoryModal extends Modal {

@@ -1,3 +1,48 @@
+.contexts-pane {
+  padding: 8px;
+}
+
+.contexts-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.contexts-section {
+  margin: 12px 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.contexts-row {
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.contexts-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.contexts-row-meta,
+.contexts-trail-delta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.contexts-trail-row {
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.contexts-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
 .contexts-history {
   max-height: 60vh;
   overflow: auto;

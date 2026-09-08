@@ -223,7 +223,7 @@ export default class ContextsPlugin extends Plugin {
     if ((file?.path ?? null) === this.recorder.activePath) return;
     await this.closeSpan();
     if (file && this.tracked(file.path)) {
-      const snap = await this.snapshot(file);
+      const snap = await this.snapshot(file, false);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime);
       this.refreshPane();
@@ -234,23 +234,30 @@ export default class ContextsPlugin extends Plugin {
     const path = this.recorder.activePath;
     if (!path) return;
     const file = this.app.vault.getAbstractFileByPath(path);
-    const after = file instanceof TFile ? await this.snapshot(file) : null;
+    const after = file instanceof TFile ? await this.snapshot(file, true) : null;
     const ev = this.recorder.deactivate(after, end ?? Date.now());
     this.recentDeact.set(path, Date.now());
     if (ev) await this.record(ev);
   }
 
   /**
-   * The file's current text, preferring the live editor buffer over disk.
-   * cachedRead returns what's saved; edits made in the last moments before
-   * tabbing away may not be flushed yet, and the trailing autosave is then
-   * suppressed by the deactivation grace window — so a disk read at close
-   * silently loses final-second edits.
+   * The file's current text from a live editor buffer, or null if no loaded
+   * editor holds it. ONLY safe at deactivation: during a file switch the
+   * view's `file` points at the new file before the buffer content swaps, so
+   * an activation-time read can return the PREVIOUS file's text and poison
+   * the snapshot (spans then "diff" two different files). At close the file
+   * was demonstrably loaded for the whole span, and the buffer is what
+   * cachedRead misses: keystrokes not yet autosaved when the user tabs away.
    */
   private liveContent(file: TFile): string | null {
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
       const view = leaf.view;
-      if (view instanceof MarkdownView && view.file?.path === file.path) return view.editor.getValue();
+      if (view instanceof MarkdownView && view.file?.path === file.path) {
+        const text = view.editor.getValue();
+        // Empty buffer for a non-empty file: the editor hasn't loaded it yet.
+        if (text === "" && file.stat.size > 0) return null;
+        return text;
+      }
     }
     return null;
   }
@@ -258,11 +265,12 @@ export default class ContextsPlugin extends Plugin {
   /**
    * Disabled capture signals are skipped entirely, not computed and discarded.
    * Everything parses straight from the content in hand; the metadata cache is
-   * not consulted, since it lags behind unsaved keystrokes.
+   * not consulted, since it lags behind unsaved keystrokes. `atClose` decides
+   * the source: live buffer at deactivation, disk at activation (see liveContent).
    */
-  private async snapshot(file: TFile): Promise<Snapshot> {
+  private async snapshot(file: TFile, atClose: boolean): Promise<Snapshot> {
     const c = this.settings.capture;
-    const content = this.liveContent(file) ?? (await this.app.vault.cachedRead(file));
+    const content = (atClose ? this.liveContent(file) : null) ?? (await this.app.vault.cachedRead(file));
     const body = stripCodeFences(content);
     const fmRaw = c.frontmatter || c.tags ? frontmatterOf(content) : {};
     const fmt = c.formatting ? extractFormatting(content) : { bold: 0, italic: 0 };

@@ -1,6 +1,8 @@
 import { App, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
+import { DayBlock } from "./dayblock";
+import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import {
   LeaveReason,
@@ -69,6 +71,9 @@ export default class ContextsPlugin extends Plugin {
 
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
+    this.registerMarkdownCodeBlockProcessor("contexts-day", (source, el, ctx) => {
+      ctx.addChild(new DayBlock(this, el, source, ctx.sourcePath));
+    });
     this.patchOpenLinkText();
     this.patchSuggestModal();
 
@@ -153,6 +158,12 @@ export default class ContextsPlugin extends Plugin {
       id: "dump-recent-history",
       name: "Dump recent history",
       callback: () => void this.dumpHistory(),
+    });
+
+    this.addCommand({
+      id: "insert-day-summary",
+      name: "Insert or update day summary in current note",
+      callback: () => void this.insertDaySummary(),
     });
 
     this.addCommand({
@@ -266,10 +277,42 @@ export default class ContextsPlugin extends Plugin {
     this.refreshPane();
   }
 
+  private dayBlocks = new Set<DayBlock>();
+
+  registerDayBlock(block: DayBlock): void {
+    this.dayBlocks.add(block);
+  }
+
+  unregisterDayBlock(block: DayBlock): void {
+    this.dayBlocks.delete(block);
+  }
+
   private refreshPane(): void {
     for (const leaf of this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)) {
       void (leaf.view as ContextsPane).render();
     }
+    for (const block of this.dayBlocks) void block.render();
+  }
+
+  /**
+   * The durable fallback to the live block: write the day's record as real
+   * markdown (real wikilinks, so the note gains graph edges to the files)
+   * between comment markers in the ACTIVE note. Date from the note's
+   * filename, else today. Re-running replaces the marked region.
+   */
+  private async insertDaySummary(): Promise<void> {
+    const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if (!file) {
+      new Notice("Contexts: open the note to insert into first.");
+      return;
+    }
+    const iso = file.basename.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    const d = iso ? new Date(`${iso}T00:00:00`) : new Date();
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const body = dailyMarkdown(events, dayStart, dayStart + 24 * 3600_000, this.settings.sessionGapMin * 60_000);
+    await this.app.vault.process(file, (content) => upsertDaySection(content, body));
+    new Notice("Contexts: day summary inserted.");
   }
 
   private async activatePane(): Promise<void> {

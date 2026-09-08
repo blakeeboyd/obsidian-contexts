@@ -7,6 +7,7 @@ import {
   applyRenames,
   coalesceTrail,
   excludeFolders,
+  fileInterest,
   groupSessions,
   healRenames,
   isStint,
@@ -258,6 +259,20 @@ describe("mergeDeltas", () => {
   it("shows word movement in both directions even when the net is zero", () => {
     expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toEqual({ wordsAdded: 5, wordsRemoved: 5 });
     expect(mergeDeltas([])).toBeUndefined();
+  });
+});
+
+describe("fileInterest", () => {
+  it("ranks by recency-decayed visits with edits boosted", () => {
+    const HOUR = 3600_000;
+    const events: LogEvent[] = [
+      span("Old.md", 0),
+      span("Read.md", 40 * HOUR),
+      { ...span("Edited.md", 40 * HOUR + 10 * MIN), edit: { words: 5 } },
+    ];
+    const doi = fileInterest(events, 41 * HOUR, 30 * 24 * HOUR);
+    expect(doi.get("Edited.md")!).toBeGreaterThan(doi.get("Read.md")!);
+    expect(doi.get("Read.md")!).toBeGreaterThan(doi.get("Old.md")! * 0.9);
   });
 });
 

@@ -1,5 +1,5 @@
 import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
-import type { EditDelta } from "./recorder";
+import type { EditDelta, LogEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import {
@@ -11,6 +11,7 @@ import {
   applyRenames,
   coalesceTrail,
   excludeFolders,
+  fileInterest,
   groupSessions,
   healRenames,
   isStint,
@@ -94,6 +95,7 @@ const TRAIL_LIMIT = 30;
 const SESSION_LIMIT = 5;
 const FILES_PER_SESSION = 12;
 const RELATIONSHIPS_LIMIT = 30;
+const ACTIVE_FILES_LIMIT = 8;
 
 export class ContextsPane extends ItemView {
   // Transient: survives the pane's frequent re-renders, resets with the session.
@@ -153,6 +155,7 @@ export class ContextsPane extends ItemView {
     const mainIsEmpty = this.app.workspace.getMostRecentLeaf()?.view.getViewType() === "empty";
     const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
+      this.renderActiveFiles(contentEl, events);
       this.renderSessions(contentEl, sessions);
       return;
     }
@@ -365,6 +368,19 @@ export class ContextsPane extends ItemView {
       this.app.workspace.trigger("file-menu", menu, file, CONTEXTS_VIEW_TYPE);
       menu.showAtMouseEvent(evt);
     });
+  }
+
+  /** Per-file attention ranking (Mylyn-style DOI): where attention has been living lately. */
+  private renderActiveFiles(contentEl: HTMLElement, events: LogEvent[]): void {
+    const halfLife = this.plugin.settings.halfLifeDays * 24 * 3600_000;
+    const hot = [...fileInterest(events, Date.now(), halfLife).entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, ACTIVE_FILES_LIMIT);
+    if (!hot.length) return;
+    contentEl.createDiv({ text: "Active files", cls: "contexts-section" });
+    for (const [f, score] of hot) {
+      this.fileRow(contentEl, f, `interest ${score.toFixed(1)}`);
+    }
   }
 
   /** No note open: show the last few sessions and the files each touched. */

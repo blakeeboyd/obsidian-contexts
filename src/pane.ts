@@ -144,7 +144,11 @@ export class ContextsPane extends ItemView {
     contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
     const halfLife = s.halfLifeDays * 24 * 3600_000;
     const dismissed = unrelatedPairs(events);
-    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed).slice(0, RELATED_LIMIT);
+    // Dismissed pairs leave the list outright (not merely demoted): the user
+    // said "not related," and they remain reachable under hidden connections.
+    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed)
+      .filter((r) => !r.dismissed)
+      .slice(0, RELATED_LIMIT);
     if (!related.length) {
       contentEl.createDiv({
         text: `Nothing yet. ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded; companionship accumulates as you work.`,
@@ -153,11 +157,9 @@ export class ContextsPane extends ItemView {
     }
     for (const r of related) {
       this.fileRow(contentEl, r.path, `${r.sharedSessions} shared · ${relTime(r.lastAt)}`, {
-        icon: r.dismissed ? "rotate-ccw" : "x",
-        tooltip: r.dismissed
-          ? "Marked unrelated — click to restore the connection"
-          : "Not related: keep tracking, but weight this connection near zero",
-        onClick: () => this.plugin.markRelated(path, r.path, !!r.dismissed),
+        icon: "x",
+        tooltip: "Not related: keep tracking, but weight this connection near zero",
+        onClick: () => this.plugin.markRelated(path, r.path, false),
       });
     }
     this.renderHiddenConnections(contentEl, sessions, dismissed, path);

@@ -101,6 +101,8 @@ const ACTIVE_FILES_LIMIT = 8;
 export class ContextsPane extends ItemView {
   // Transient: survives the pane's frequent re-renders, resets with the session.
   private relationshipsOpen = false;
+  // Which session groups the user has expanded, keyed by session start time.
+  private openSessions = new Set<number>();
   // Focusing the pane closes the active file's span, which logs an event,
   // which re-renders the pane — destroying the element mid-click (mousedown
   // and mouseup must land on the same node). Hold renders while a pointer is
@@ -408,15 +410,28 @@ export class ContextsPane extends ItemView {
     }
     for (const sess of sessions.slice(-SESSION_LIMIT).reverse()) {
       const engaged = sess.spans.reduce((sum, sp) => sum + sp.dur, 0);
-      contentEl.createDiv({
-        text: `${relDay(sess.start)} · ${fmtClock(sess.start)} → ${fmtClock(sess.end)} · ${fmtDur(engaged)} engaged`,
-        cls: "contexts-section",
+      // Collapsed by default: a summary line per session, files on demand.
+      const open = this.openSessions.has(sess.start);
+      const header = contentEl.createDiv({ cls: "contexts-section contexts-expandable contexts-session-header" });
+      const caret = header.createSpan({ cls: "contexts-chip-icon" });
+      setIcon(caret, open ? "chevron-down" : "chevron-right");
+      header.createSpan({
+        text: `${relDay(sess.start)} · ${fmtClock(sess.start)} → ${fmtClock(sess.end)} · ${fmtDur(engaged)} · ${sess.files.length} file${sess.files.length === 1 ? "" : "s"}`,
+      });
+      const list = contentEl.createDiv();
+      list.hidden = !open;
+      header.addEventListener("click", () => {
+        const nowOpen = list.hidden;
+        list.hidden = !nowOpen;
+        if (nowOpen) this.openSessions.add(sess.start);
+        else this.openSessions.delete(sess.start);
+        setIcon(caret, nowOpen ? "chevron-down" : "chevron-right");
       });
       for (const f of sess.files.slice(0, FILES_PER_SESSION)) {
-        this.fileRow(contentEl, f, "");
+        this.fileRow(list, f, "");
       }
       if (sess.files.length > FILES_PER_SESSION) {
-        contentEl.createDiv({ text: `+${sess.files.length - FILES_PER_SESSION} more`, cls: "contexts-empty" });
+        list.createDiv({ text: `+${sess.files.length - FILES_PER_SESSION} more`, cls: "contexts-empty" });
       }
     }
   }

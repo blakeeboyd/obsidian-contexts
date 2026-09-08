@@ -79,11 +79,16 @@ export class ContextsPane extends ItemView {
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
         row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
-        const delta = ev.edit ? fmtDelta(ev.edit) : "";
-        if (delta && ev.edit) {
-          const deltaEl = row.createDiv({ text: delta, cls: "contexts-trail-delta" });
-          deltaEl.setAttribute("title", fmtDeltaVerbose(ev.edit)); // hover for names and values
-        }
+        if (ev.edit) row.createDiv({ text: fmtDelta(ev.edit), cls: "contexts-trail-delta" });
+        // Click to expand: the stint's full story (range, engaged time, what changed).
+        const lines = [
+          `${fmtTime(ev.start)} → ${fmtTime(ev.end)} · ${fmtDur(ev.dur)} engaged · ${ev.count} visit${ev.count === 1 ? "" : "s"}`,
+        ];
+        if (ev.edit) lines.push(fmtDeltaVerbose(ev.edit));
+        const details = row.createDiv({ cls: "contexts-trail-details", text: lines.join("\n") });
+        details.hidden = true;
+        row.addClass("contexts-expandable");
+        row.addEventListener("click", () => (details.hidden = !details.hidden));
       } else {
         const label =
           ev.type === "create" ? "created"

@@ -48,6 +48,47 @@ function clip(s: string): string {
   return t.length > MAX_CAPTURE_CHARS ? t.slice(0, MAX_CAPTURE_CHARS) : t;
 }
 
+/**
+ * These extractors parse straight from text rather than Obsidian's metadata
+ * cache: the cache lags behind unsaved keystrokes, so a cache-based snapshot
+ * at deactivation loses edits made just before tabbing away.
+ */
+
+/** ponytail: fenced blocks only (``` / ~~~); an unclosed fence leaves its tail unstripped. */
+export function stripCodeFences(content: string): string {
+  return content.replace(/^[ \t]*(?:```|~~~).*\n[\s\S]*?^[ \t]*(?:```|~~~).*$/gm, "");
+}
+
+/** Wikilink and embed targets: [[Target]], [[Target#h|alias]], ![[Target]]. ponytail: markdown-style [text](file.md) links are not parsed; this vault's convention is wikilinks. */
+export function extractLinks(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/\[\[([^\][|#\n]+)(?:#[^\][|\n]*)?(?:\|[^\][\n]*)?\]\]/g)) {
+    const target = m[1].trim();
+    if (target) out.push(target);
+  }
+  return out;
+}
+
+/** Inline #tags plus pre-normalized frontmatter tags, deduplicated, all #-prefixed. */
+export function extractTags(content: string, fmTags: string[] = []): string[] {
+  const out = new Set<string>(fmTags);
+  for (const m of content.matchAll(/(?:^|[\s(])#([\p{L}\p{N}_/-]+)/gmu)) out.add("#" + m[1]);
+  return [...out];
+}
+
+/** Frontmatter `tags`/`tag` values (array or comma string) normalized to #-prefixed strings. */
+export function fmTagList(fm: Record<string, unknown>): string[] {
+  const raw = fm.tags ?? fm.tag;
+  const arr = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(",") : [];
+  return arr.map((t) => "#" + String(t).trim().replace(/^#/, "")).filter((t) => t !== "#");
+}
+
+export function extractHeadings(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/^#{1,6}[ \t]+(.+?)[ \t]*$/gm)) out.push(m[1]);
+  return out;
+}
+
 /** ==marked text==. ponytail: a highlight containing a bare `=` is missed; linear regex over ReDoS risk. */
 export function extractHighlights(content: string): string[] {
   const out: string[] = [];

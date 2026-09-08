@@ -1,4 +1,4 @@
-import { App, MarkdownView, Modal, Notice, Plugin, TFile, getAllTags } from "obsidian";
+import { App, MarkdownView, Modal, Notice, Plugin, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
@@ -8,8 +8,13 @@ import {
   Snapshot,
   extractFootnotes,
   extractFormatting,
+  extractHeadings,
   extractHighlights,
+  extractLinks,
+  extractTags,
+  fmTagList,
   isSpan,
+  stripCodeFences,
 } from "./recorder";
 import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
 import { applyRenames, groupSessions, healRenames, relatedTo } from "./views";
@@ -250,25 +255,26 @@ export default class ContextsPlugin extends Plugin {
     return null;
   }
 
-  /** Disabled capture signals are skipped entirely, not computed and discarded. */
+  /**
+   * Disabled capture signals are skipped entirely, not computed and discarded.
+   * Everything parses straight from the content in hand; the metadata cache is
+   * not consulted, since it lags behind unsaved keystrokes.
+   */
   private async snapshot(file: TFile): Promise<Snapshot> {
     const c = this.settings.capture;
-    // ponytail: cache-derived fields (links/tags/headings/frontmatter) still lag
-    // behind unsaved keystrokes; parsing them from content is the upgrade path.
     const content = this.liveContent(file) ?? (await this.app.vault.cachedRead(file));
-    const cache = this.app.metadataCache.getFileCache(file);
+    const body = stripCodeFences(content);
+    const fmRaw = c.frontmatter || c.tags ? frontmatterOf(content) : {};
     const fmt = c.formatting ? extractFormatting(content) : { bold: 0, italic: 0 };
     const fm: Record<string, string> = {};
-    if (c.frontmatter && cache?.frontmatter) {
-      for (const [k, v] of Object.entries(cache.frontmatter)) {
-        if (k !== "position") fm[k] = JSON.stringify(v) ?? "";
-      }
+    if (c.frontmatter) {
+      for (const [k, v] of Object.entries(fmRaw)) fm[k] = JSON.stringify(v) ?? "";
     }
     return {
       words: c.words ? content.split(/\s+/).filter(Boolean).length : 0,
-      links: c.links ? [...(cache?.links ?? []), ...(cache?.embeds ?? [])].map((l) => l.link) : [],
-      tags: c.tags && cache ? getAllTags(cache) ?? [] : [],
-      headings: c.headings ? cache?.headings?.map((h) => h.heading) ?? [] : [],
+      links: c.links ? extractLinks(body) : [],
+      tags: c.tags ? extractTags(body, fmTagList(fmRaw)) : [],
+      headings: c.headings ? extractHeadings(body) : [],
       highlights: c.highlights ? extractHighlights(content) : [],
       footnotes: c.footnotes ? extractFootnotes(content) : [],
       bold: fmt.bold,
@@ -305,6 +311,16 @@ export default class ContextsPlugin extends Plugin {
 
     const body = events.slice(-100).reverse().map(fmtEvent).join("\n");
     new HistoryModal(this.app, header + related + "\n" + body).open();
+  }
+}
+
+function frontmatterOf(content: string): Record<string, unknown> {
+  const m = content.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+  if (!m) return {};
+  try {
+    return (parseYaml(m[1]) as Record<string, unknown>) ?? {};
+  } catch {
+    return {}; // mid-keystroke YAML is often invalid; an empty read beats a throw
   }
 }
 

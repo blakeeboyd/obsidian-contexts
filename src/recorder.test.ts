@@ -5,7 +5,12 @@ import {
   diffSnapshots,
   extractFootnotes,
   extractFormatting,
+  extractHeadings,
   extractHighlights,
+  extractLinks,
+  extractTags,
+  fmTagList,
+  stripCodeFences,
 } from "./recorder";
 
 function snap(partial: Partial<Snapshot> = {}): Snapshot {
@@ -31,6 +36,29 @@ describe("extractors", () => {
   it("finds footnote definitions and inline footnotes", () => {
     const text = "claim.[^1]\n\n[^1]: the source\n\nand inline.^[quick aside]";
     expect(extractFootnotes(text)).toEqual(["the source", "quick aside"]);
+  });
+
+  it("finds wikilink targets, dropping aliases, subpaths, and the embed bang", () => {
+    const text = "See [[&Jason Fick|Jason]] and [[Note#Heading]] plus ![[image.png]].";
+    expect(extractLinks(text)).toEqual(["&Jason Fick", "Note", "image.png"]);
+  });
+
+  it("finds inline tags and merges frontmatter tags", () => {
+    const tags = extractTags("body #status/open and (#music) but not#this", ["#from-fm"]);
+    expect(tags.sort()).toEqual(["#from-fm", "#music", "#status/open"]);
+  });
+
+  it("normalizes frontmatter tag shapes", () => {
+    expect(fmTagList({ tags: ["a", "#b"] })).toEqual(["#a", "#b"]);
+    expect(fmTagList({ tags: "x, y" })).toEqual(["#x", "#y"]);
+    expect(fmTagList({})).toEqual([]);
+  });
+
+  it("finds headings and ignores fenced code", () => {
+    const text = "# Top\n\n```\n# not a heading\n[[not a link]]\n```\n\n## Sub\n";
+    const body = stripCodeFences(text);
+    expect(extractHeadings(body)).toEqual(["Top", "Sub"]);
+    expect(extractLinks(body)).toEqual([]);
   });
 
   it("counts bold and italic without conflating them", () => {

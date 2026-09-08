@@ -179,7 +179,43 @@ export interface ExtModEvent {
   path: string;
 }
 
-export type LogEvent = SpanEvent | RenameEvent | DeleteEvent | CreateEvent | ExtModEvent;
+/**
+ * Written once, the first time Contexts meets a file that predates its
+ * record: the trail's floor. Counts only, never content — the vault holds
+ * the substance; this just says how much was already there.
+ */
+export interface FirstSeenEvent {
+  t: number;
+  type: "firstseen";
+  path: string;
+  ctime?: number;
+  counts: {
+    words: number;
+    links: number;
+    tags: number;
+    headings: number;
+    highlights: number;
+    footnotes: number;
+    tasksOpen: number;
+    tasksDone: number;
+  };
+}
+
+export type LogEvent = SpanEvent | RenameEvent | DeleteEvent | CreateEvent | ExtModEvent | FirstSeenEvent;
+
+/** Baseline counts from a snapshot (zeros for signals whose capture is off). */
+export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {
+  return {
+    words: snap.words,
+    links: snap.links.length,
+    tags: snap.tags.length,
+    headings: snap.headings.length,
+    highlights: snap.highlights.length,
+    footnotes: snap.footnotes.length,
+    tasksOpen: snap.tasksOpen.length,
+    tasksDone: snap.tasksDone.length,
+  };
+}
 
 export function isSpan(ev: LogEvent): ev is SpanEvent {
   return !("type" in ev);

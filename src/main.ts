@@ -13,6 +13,7 @@ import {
   extractLinks,
   extractTags,
   extractTasks,
+  firstSeenCounts,
   fmTagList,
   isSpan,
   stripCodeFences,
@@ -138,6 +139,16 @@ export default class ContextsPlugin extends Plugin {
     void this.saveSettings();
   }
 
+  /** Any event already mentions this path (under this name). ponytail: linear scan; index if the log grows large. */
+  private async isKnown(path: string): Promise<boolean> {
+    const events = await this.getEvents();
+    return events.some(
+      (ev) =>
+        ("path" in ev && ev.path === path) ||
+        ("type" in ev && ev.type === "rename" && (ev.to === path || ev.from === path))
+    );
+  }
+
   /** False when recording is paused or the path sits in an excluded folder. */
   private tracked(path: string): boolean {
     if (this.settings.paused) return false;
@@ -226,6 +237,17 @@ export default class ContextsPlugin extends Plugin {
     await this.closeSpan();
     if (file && this.tracked(file.path)) {
       const snap = await this.snapshot(file, false);
+      // A file with no history predates the record: log its baseline once.
+      // Files created while recording already have a create event, so they skip this.
+      if (!(await this.isKnown(file.path))) {
+        await this.record({
+          t: Date.now(),
+          type: "firstseen",
+          path: file.path,
+          ctime: file.stat.ctime,
+          counts: firstSeenCounts(snap),
+        });
+      }
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime);
     }

@@ -114,6 +114,7 @@ export class ContextsPane extends ItemView {
           ev.type === "create" ? ["file-plus", "created"]
           : ev.type === "delete" ? ["file-x", "deleted"]
           : ev.type === "extmod" ? ["bot", "edited externally (AI, sync, script)"]
+          : ev.type === "firstseen" ? ["eye", "first seen by Contexts"]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
         line.createSpan({ text: `${fmtTime(ev.t)} · ` });
@@ -124,6 +125,13 @@ export class ContextsPane extends ItemView {
         const details = row.createDiv({ cls: "contexts-trail-details" });
         details.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-details-header" });
         details.createDiv({ text: ev.type === "rename" ? `${ev.from} → ${ev.to}` : ev.path });
+        if (ev.type === "firstseen") {
+          const c = ev.counts;
+          if (ev.ctime) details.createDiv({ text: `created ${fmtTime(ev.ctime)}` });
+          details.createDiv({
+            text: `already had: ${c.words} words · ${c.links} links · ${c.tags} tags · ${c.headings} headings · ${c.highlights} highlights · ${c.footnotes} footnotes · ${c.tasksOpen + c.tasksDone} tasks`,
+          });
+        }
         details.hidden = true;
         row.addClass("contexts-expandable");
         row.addEventListener("click", () => (details.hidden = !details.hidden));

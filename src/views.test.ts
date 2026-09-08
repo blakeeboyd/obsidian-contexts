@@ -56,6 +56,19 @@ describe("applyRenames", () => {
   });
 });
 
+describe("applyRenames with firstseen", () => {
+  it("keeps a firstseen baseline attached through a rename", () => {
+    const counts = { words: 5, links: 1, tags: 0, headings: 0, highlights: 0, footnotes: 0, tasksOpen: 0, tasksDone: 0 };
+    const events: LogEvent[] = [
+      { t: 0, type: "firstseen", path: "A.md", counts },
+      span("A.md", MIN),
+      { t: 10 * MIN, type: "rename", from: "A.md", to: "B.md" },
+    ];
+    const out = applyRenames(events);
+    expect(out[0]).toMatchObject({ type: "firstseen", path: "B.md" });
+  });
+});
+
 describe("healRenames", () => {
   it("synthesizes a rename when spans move between paths sharing a ctime", () => {
     const events: LogEvent[] = [span("A.md", 0, 5 * MIN, 42), span("B.md", 20 * MIN, 5 * MIN, 42)];

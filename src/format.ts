@@ -109,6 +109,7 @@ export function fmtEvent(ev: LogEvent): string {
       ev.type === "rename" ? `renamed: ${ev.from} → ${ev.to}`
       : ev.type === "delete" ? `deleted: ${ev.path}`
       : ev.type === "create" ? `created: ${ev.path}`
+      : ev.type === "firstseen" ? `first seen: ${ev.path} (${ev.counts.words}w, ${ev.counts.links} links)`
       : `external edit: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

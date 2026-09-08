@@ -140,7 +140,7 @@ export class ContextsPane extends ItemView {
     const row = container.createDiv({ cls: "contexts-row" });
     row.createDiv({ text: path.split("/").pop()?.replace(/\.md$/, "") ?? path, cls: "contexts-row-title" });
     const metaLine = row.createDiv({ cls: "contexts-row-meta contexts-row-metaline" });
-    const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+    const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "/";
     metaLine.createSpan({ text: folder, cls: "contexts-row-folder" });
     if (meta) metaLine.createSpan({ text: meta, cls: "contexts-row-when" });
     row.setAttribute("aria-label", path);

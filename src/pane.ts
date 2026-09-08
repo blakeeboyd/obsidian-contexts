@@ -393,8 +393,9 @@ export class ContextsPane extends ItemView {
       .slice(0, ACTIVE_FILES_LIMIT);
     if (!hot.length) return;
     contentEl.createDiv({ text: "Active files", cls: "contexts-section" });
-    for (const [f, score] of hot) {
-      this.fileRow(contentEl, f, `interest ${score.toFixed(1)}`);
+    // Ranked by interest; the score itself stays internal.
+    for (const [f] of hot) {
+      this.fileRow(contentEl, f, "");
     }
   }
 

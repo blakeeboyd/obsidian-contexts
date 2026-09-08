@@ -254,7 +254,7 @@ describe("relatedness feedback", () => {
 
   it("demotes a dismissed pair far below an undismissed one", () => {
     const events = [span("Me.md", 0), span("Buddy.md", 6 * MIN), span("Noise.md", 12 * MIN)];
-    const dismissed = new Set([pairKey("Me.md", "Noise.md")]);
+    const dismissed = new Map([[pairKey("Me.md", "Noise.md"), 15 * MIN]]);
     const related = relatedTo("Me.md", groupSessions(events), 20 * MIN, undefined, dismissed);
     expect(related[0].path).toBe("Buddy.md");
     expect(related[1].path).toBe("Noise.md");
@@ -264,7 +264,7 @@ describe("relatedness feedback", () => {
 
   it("ranks all pairs globally with dismissed ones demoted but present", () => {
     const events = [span("A.md", 0), span("B.md", 6 * MIN), span("C.md", 12 * MIN)];
-    const dismissed = new Set([pairKey("A.md", "C.md")]);
+    const dismissed = new Map([[pairKey("A.md", "C.md"), 18 * MIN]]);
     const pairs = allRelationships(groupSessions(events), 20 * MIN, undefined, dismissed);
     expect(pairs).toHaveLength(3); // AB, AC, BC
     const ac = pairs.find((p) => p.dismissed);

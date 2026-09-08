@@ -37,7 +37,7 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   title.createSpan({ text: " ↔ " });
   nameSpan(p.b);
   const meta = p.dismissed
-    ? `${p.rawScore.toFixed(2)} → ${p.score.toFixed(2)} · marked unrelated · ${p.sharedSessions} shared`
+    ? `${p.dismissedAt ? `hidden ${fmtTime(p.dismissedAt)}` : "hidden"} · ${p.sharedSessions} shared`
     : `${p.score.toFixed(2)} · ${p.sharedSessions} shared · ${relTime(p.lastAt)}`;
   row.createDiv({ text: meta, cls: "contexts-row-meta" });
   const btn = row.createDiv({ cls: "contexts-row-action" });
@@ -276,7 +276,7 @@ export class ContextsPane extends ItemView {
   private renderHiddenConnections(
     contentEl: HTMLElement,
     sessions: Session[],
-    dismissed: Set<string>,
+    dismissed: Map<string, number>,
     path: string
   ): void {
     if (!dismissed.size) return;

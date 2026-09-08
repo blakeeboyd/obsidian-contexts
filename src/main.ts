@@ -1,25 +1,71 @@
 import { App, MarkdownView, Modal, Plugin, TFile, getAllTags } from "obsidian";
 import { EventLog, getDeviceId } from "./log";
-import { LogEvent, Recorder, Snapshot, extractFootnotes, extractHighlights, isSpan } from "./recorder";
+import {
+  LogEvent,
+  Recorder,
+  Snapshot,
+  extractFootnotes,
+  extractFormatting,
+  extractHighlights,
+  isSpan,
+} from "./recorder";
+import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
 import { applyRenames, groupSessions, relatedTo } from "./views";
 
+// A modify event on a path this soon after its span closed is the editor's
+// trailing autosave, not an external edit.
+const RECENT_DEACT_GRACE_MS = 3000;
+// One extmod per path per window; AI and sync writes arrive in bursts.
+const EXTMOD_COALESCE_MS = 15_000;
+const IDLE_CHECK_MS = 60_000;
+
 export default class ContextsPlugin extends Plugin {
+  settings: ContextsSettings = DEFAULT_SETTINGS;
   private recorder = new Recorder();
   private log!: EventLog;
   // Serializes all recorder/log operations so async snapshots never interleave.
   private queue: Promise<void> = Promise.resolve();
+  private lastActivity = Date.now();
+  private idleClosed = false;
+  private recentDeact = new Map<string, number>();
+  private lastExtmod = new Map<string, number>();
 
   async onload() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    this.settings.capture = Object.assign({}, DEFAULT_SETTINGS.capture, this.settings.capture);
+    this.addSettingTab(new ContextsSettingTab(this.app, this));
+
     this.log = new EventLog(this.app.vault.adapter, `${this.manifest.dir}/log`, getDeviceId());
 
     this.app.workspace.onLayoutReady(() => {
       this.registerEvent(
-        this.app.workspace.on("active-leaf-change", () => this.enqueue(() => this.onActiveChange()))
+        this.app.workspace.on("active-leaf-change", () => {
+          this.bumpActivity();
+          this.enqueue(() => this.onActiveChange());
+        })
       );
       // App loses/regains focus: close the span so time in other apps is not
       // counted as engagement, reopen it on return.
       this.registerDomEvent(window, "blur", () => this.enqueue(() => this.closeSpan()));
       this.registerDomEvent(window, "focus", () => this.enqueue(() => this.onActiveChange()));
+
+      // Activity signals for idle detection: cheap assignments, nothing more.
+      for (const evName of ["keydown", "mousedown", "mousemove", "wheel"] as const) {
+        this.registerDomEvent(window, evName, () => this.bumpActivity());
+      }
+      this.registerInterval(window.setInterval(() => this.checkIdle(), IDLE_CHECK_MS));
+
+      // Registered after layout-ready so the vault-load flood of create events is not logged.
+      this.registerEvent(
+        this.app.vault.on("create", (file) => {
+          if (file instanceof TFile && file.extension === "md" && this.settings.capture.externalEdits) {
+            this.enqueue(() => this.log.append({ t: Date.now(), type: "create", path: file.path }));
+          }
+        })
+      );
+
+      this.registerEvent(this.app.vault.on("modify", (file) => this.onModify(file)));
+
       // Capture the file already open at startup.
       this.enqueue(() => this.onActiveChange());
     });
@@ -55,8 +101,44 @@ export default class ContextsPlugin extends Plugin {
     this.enqueue(() => this.closeSpan());
   }
 
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
+
   private enqueue(op: () => Promise<void>): void {
     this.queue = this.queue.then(op).catch((e) => console.error("Contexts:", e));
+  }
+
+  private bumpActivity(): void {
+    this.lastActivity = Date.now();
+    if (this.idleClosed) {
+      this.idleClosed = false;
+      this.enqueue(() => this.onActiveChange());
+    }
+  }
+
+  /** No input for the timeout: close the span back-dated to the last real activity. */
+  private checkIdle(): void {
+    const timeoutMs = this.settings.idleTimeoutMin * 60_000;
+    if (!timeoutMs || !this.recorder.activePath) return;
+    if (Date.now() - this.lastActivity < timeoutMs) return;
+    this.idleClosed = true;
+    const end = this.lastActivity;
+    this.enqueue(() => this.closeSpan(end));
+  }
+
+  private onModify(file: unknown): void {
+    if (!(file instanceof TFile) || file.extension !== "md") return;
+    if (file.path === this.recorder.activePath) {
+      this.bumpActivity();
+      return;
+    }
+    if (!this.settings.capture.externalEdits) return;
+    const now = Date.now();
+    if (now - (this.recentDeact.get(file.path) ?? 0) < RECENT_DEACT_GRACE_MS) return;
+    if (now - (this.lastExtmod.get(file.path) ?? 0) < EXTMOD_COALESCE_MS) return;
+    this.lastExtmod.set(file.path, now);
+    this.enqueue(() => this.log.append({ t: now, type: "extmod", path: file.path }));
   }
 
   /** The active leaf changed: close the previous span, open one for the new file (markdown only). */
@@ -67,30 +149,43 @@ export default class ContextsPlugin extends Plugin {
     await this.closeSpan();
     if (file) {
       const snap = await this.snapshot(file);
-      this.recorder.activate(file.path, snap, Date.now());
+      const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
+      this.recorder.activate(file.path, snap, Date.now(), ctime);
     }
   }
 
-  private async closeSpan(): Promise<void> {
+  private async closeSpan(end?: number): Promise<void> {
     const path = this.recorder.activePath;
     if (!path) return;
     const file = this.app.vault.getAbstractFileByPath(path);
     const after = file instanceof TFile ? await this.snapshot(file) : null;
-    const ev = this.recorder.deactivate(after, Date.now());
+    const ev = this.recorder.deactivate(after, end ?? Date.now());
+    this.recentDeact.set(path, Date.now());
     if (ev) await this.log.append(ev);
   }
 
+  /** Disabled capture signals are skipped entirely, not computed and discarded. */
   private async snapshot(file: TFile): Promise<Snapshot> {
+    const c = this.settings.capture;
     const content = await this.app.vault.cachedRead(file);
     const cache = this.app.metadataCache.getFileCache(file);
-    const links = [...(cache?.links ?? []), ...(cache?.embeds ?? [])].map((l) => l.link);
+    const fmt = c.formatting ? extractFormatting(content) : { bold: 0, italic: 0 };
+    const fm: Record<string, string> = {};
+    if (c.frontmatter && cache?.frontmatter) {
+      for (const [k, v] of Object.entries(cache.frontmatter)) {
+        if (k !== "position") fm[k] = JSON.stringify(v) ?? "";
+      }
+    }
     return {
-      words: content.split(/\s+/).filter(Boolean).length,
-      links,
-      tags: cache ? getAllTags(cache) ?? [] : [],
-      headings: cache?.headings?.map((h) => h.heading) ?? [],
-      highlights: extractHighlights(content),
-      footnotes: extractFootnotes(content),
+      words: c.words ? content.split(/\s+/).filter(Boolean).length : 0,
+      links: c.links ? [...(cache?.links ?? []), ...(cache?.embeds ?? [])].map((l) => l.link) : [],
+      tags: c.tags && cache ? getAllTags(cache) ?? [] : [],
+      headings: c.headings ? cache?.headings?.map((h) => h.heading) ?? [] : [],
+      highlights: c.highlights ? extractHighlights(content) : [],
+      footnotes: c.footnotes ? extractFootnotes(content) : [],
+      bold: fmt.bold,
+      italic: fmt.italic,
+      fm,
     };
   }
 
@@ -102,13 +197,14 @@ export default class ContextsPlugin extends Plugin {
     }
     const spans = events.filter(isSpan);
     const files = new Set(spans.map((s) => s.path));
-    const sessions = groupSessions(events);
+    const sessions = groupSessions(events, this.settings.sessionGapMin * 60_000);
     const header = `${events.length} events · ${files.size} files · ${sessions.length} sessions · since ${fmtTime(events[0].t)}\n`;
 
     let related = "";
     const activePath = this.recorder.activePath;
     if (activePath) {
-      const top = relatedTo(activePath, sessions, Date.now()).slice(0, 10);
+      const halfLife = this.settings.halfLifeDays * 24 * 3600_000;
+      const top = relatedTo(activePath, sessions, Date.now(), halfLife).slice(0, 10);
       if (top.length) {
         related =
           `\nRelated to ${activePath}:\n` +
@@ -140,9 +236,12 @@ function fmtDur(ms: number): string {
 
 function fmtEvent(ev: LogEvent): string {
   if (!isSpan(ev)) {
-    return ev.type === "rename"
-      ? `${fmtTime(ev.t)}           renamed: ${ev.from} → ${ev.to}`
-      : `${fmtTime(ev.t)}           deleted: ${ev.path}`;
+    const desc =
+      ev.type === "rename" ? `renamed: ${ev.from} → ${ev.to}`
+      : ev.type === "delete" ? `deleted: ${ev.path}`
+      : ev.type === "create" ? `created: ${ev.path}`
+      : `external edit: ${ev.path}`;
+    return `${fmtTime(ev.t)}           ${desc}`;
   }
   const parts: string[] = [];
   const e = ev.edit;
@@ -157,6 +256,9 @@ function fmtEvent(ev: LogEvent): string {
       parts.push(`hl +${e.highlightsAdded?.length ?? 0}/-${e.highlightsRemoved?.length ?? 0}`);
     if (e.footnotesAdded || e.footnotesRemoved)
       parts.push(`fn +${e.footnotesAdded?.length ?? 0}/-${e.footnotesRemoved?.length ?? 0}`);
+    if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
+    if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
+    if (e.fmChanged) parts.push(`fm: ${e.fmChanged.join(",")}`);
   }
   const edit = parts.length ? `  (${parts.join(", ")})` : "";
   return `${fmtTime(ev.start)}  ${fmtDur(ev.dur).padStart(5)}  ${ev.path}${edit}`;

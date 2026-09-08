@@ -30,7 +30,7 @@ export function applyRenames(events: LogEvent[]): LogEvent[] {
     return id;
   };
   const eventIds: (number | null)[] = events.map((ev) => {
-    if (isSpan(ev)) return idAt(ev.path);
+    if (isSpan(ev) || ev.type === "create" || ev.type === "extmod") return idAt(ev.path);
     if (ev.type === "rename") {
       const id = idAt(ev.from);
       liveId.delete(ev.from);
@@ -44,9 +44,9 @@ export function applyRenames(events: LogEvent[]): LogEvent[] {
   });
   return events.map((ev, i) => {
     const id = eventIds[i];
-    if (id === null || "type" in ev && ev.type === "rename") return ev;
-    const path = nameOf.get(id!)!;
-    return path === (ev as SpanEvent).path ? ev : { ...ev, path };
+    if (id === null) return ev;
+    const path = nameOf.get(id)!;
+    return path === (ev as Exclude<LogEvent, { type: "rename" }>).path ? ev : { ...ev, path };
   });
 }
 
@@ -116,7 +116,7 @@ export function relatedTo(
   return [...acc.values()].sort((a, b) => b.score - a.score);
 }
 
-/** A single file's history: its spans and its deletion, if any (paths pre-resolved via applyRenames). */
+/** A single file's history: spans, creation, external edits, deletion (paths pre-resolved via applyRenames). */
 export function trailFor(path: string, events: LogEvent[]): LogEvent[] {
-  return events.filter((ev) => (isSpan(ev) || ev.type === "delete") && ev.path === path);
+  return events.filter((ev) => "path" in ev && ev.path === path);
 }

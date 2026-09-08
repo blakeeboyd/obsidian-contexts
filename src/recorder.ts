@@ -4,7 +4,10 @@
  * log events. No Obsidian imports, so it is testable as plain data-in/data-out.
  */
 
-/** What we remember about a file at the moment it becomes active. */
+/**
+ * What we remember about a file at the moment it becomes active. Disabled
+ * capture signals arrive as empty values and simply never produce a delta.
+ */
 export interface Snapshot {
   words: number;
   links: string[];
@@ -12,6 +15,9 @@ export interface Snapshot {
   headings: string[];
   highlights: string[];
   footnotes: string[];
+  bold: number;
+  italic: number;
+  fm: Record<string, string>; // frontmatter, values pre-stringified for cheap compare
 }
 
 /** What changed while the file was active. Only present fields changed. */
@@ -26,6 +32,9 @@ export interface EditDelta {
   highlightsRemoved?: string[];
   footnotesAdded?: string[];
   footnotesRemoved?: string[];
+  bold?: number; // net count change
+  italic?: number;
+  fmChanged?: string[]; // frontmatter keys added, removed, or altered
 }
 
 // Captured highlight/footnote text is truncated so one long annotation can't bloat the log.
@@ -51,12 +60,23 @@ export function extractFootnotes(content: string): string[] {
   return out;
 }
 
+const BOLD_RE = /(\*\*|__)(?!\s)[^\n]*?\1/g;
+
+/** ponytail: naive emphasis counts; nested or ambiguous markup miscounts are acceptable. */
+export function extractFormatting(content: string): { bold: number; italic: number } {
+  const bold = (content.match(BOLD_RE) ?? []).length;
+  const stripped = content.replace(BOLD_RE, "");
+  const italic = (stripped.match(/([*_])(?!\s)[^\n*_]*?\1/g) ?? []).length;
+  return { bold, italic };
+}
+
 /** One activation span: the file was in front of the user from start to t. */
 export interface SpanEvent {
   t: number; // deactivation timestamp (ms epoch)
   path: string;
   start: number;
   dur: number;
+  ctime?: number; // file creation time, the identity anchor for healing external renames
   edit?: EditDelta;
 }
 
@@ -74,7 +94,25 @@ export interface DeleteEvent {
   path: string;
 }
 
-export type LogEvent = SpanEvent | RenameEvent | DeleteEvent;
+export interface CreateEvent {
+  t: number;
+  type: "create";
+  path: string;
+}
+
+/**
+ * A file changed while NOT active in the editor: something other than the
+ * user's typing wrote it (AI via MCP, sync, a script, another plugin).
+ * Attribution to a specific agent is a future integration; the fact that
+ * it happened is recorded now.
+ */
+export interface ExtModEvent {
+  t: number;
+  type: "extmod";
+  path: string;
+}
+
+export type LogEvent = SpanEvent | RenameEvent | DeleteEvent | CreateEvent | ExtModEvent;
 
 export function isSpan(ev: LogEvent): ev is SpanEvent {
   return !("type" in ev);
@@ -109,33 +147,43 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   const [fnAdded, fnRemoved] = diffList(before.footnotes, after.footnotes);
   if (fnAdded.length) delta.footnotesAdded = fnAdded;
   if (fnRemoved.length) delta.footnotesRemoved = fnRemoved;
+  if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
+  if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
+  const fmChanged: string[] = [];
+  for (const k of new Set([...Object.keys(before.fm), ...Object.keys(after.fm)])) {
+    if (before.fm[k] !== after.fm[k]) fmChanged.push(k);
+  }
+  if (fmChanged.length) delta.fmChanged = fmChanged.sort();
   return Object.keys(delta).length ? delta : undefined;
 }
 
 export class Recorder {
-  private current: { path: string; start: number; snap: Snapshot } | null = null;
+  private current: { path: string; start: number; snap: Snapshot; ctime?: number } | null = null;
 
   get activePath(): string | null {
     return this.current?.path ?? null;
   }
 
-  activate(path: string, snap: Snapshot, now: number): void {
-    this.current = { path, start: now, snap };
+  activate(path: string, snap: Snapshot, now: number, ctime?: number): void {
+    this.current = { path, start: now, snap, ctime };
   }
 
   /**
    * Close the open span. `after` is the file's state at deactivation, or null
    * when it can't be read (file deleted, plugin unloading in a hurry).
+   * `end` defaults to now; an idle-close passes the last-activity time so
+   * absent minutes are not credited as engagement.
    * Returns the event to log, or null if nothing was open or the span was
    * too short to count.
    */
-  deactivate(after: Snapshot | null, now: number): SpanEvent | null {
+  deactivate(after: Snapshot | null, end: number): SpanEvent | null {
     const cur = this.current;
     this.current = null;
     if (!cur) return null;
-    const dur = now - cur.start;
+    const dur = end - cur.start;
     if (dur < MIN_SPAN_MS) return null;
-    const ev: SpanEvent = { t: now, path: cur.path, start: cur.start, dur };
+    const ev: SpanEvent = { t: end, path: cur.path, start: cur.start, dur };
+    if (cur.ctime !== undefined) ev.ctime = cur.ctime;
     if (after) {
       const edit = diffSnapshots(cur.snap, after);
       if (edit) ev.edit = edit;

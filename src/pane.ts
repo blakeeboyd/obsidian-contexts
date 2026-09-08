@@ -11,6 +11,7 @@ import {
   allRelationships,
   applyRenames,
   coalesceTrail,
+  currentContext,
   excludeFolders,
   fileInterest,
   groupSessions,
@@ -152,6 +153,15 @@ export class ContextsPane extends ItemView {
     const events = excludeFolders(applyRenames(healRenames(await this.plugin.getEvents())), s.excludedFolders);
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
 
+    // The declared context, always visible, one click to switch — the cheap
+    // gesture the declared-context model depends on.
+    const ctx = currentContext(events);
+    const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
+    setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
+    ctxLine.createSpan({ text: ctx ? `Context: ${ctx}` : "No context declared" });
+    ctxLine.setAttribute("title", "Click to declare or switch context");
+    ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
+
     // Sticky path only counts while a note is actually open somewhere AND
     // the main area isn't showing an empty "New tab" — close everything (or
     // open a fresh tab) and the pane falls back to the sessions view.
@@ -208,8 +218,8 @@ export class ContextsPane extends ItemView {
       contentEl.createDiv({ text: "No history yet for this file.", cls: "contexts-empty" });
     }
     for (const ev of trail) {
-      // Relatedness feedback is pair-scoped, not part of any single file's trail.
-      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate")) continue;
+      // Relatedness feedback and context declarations are not any single file's trail.
+      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate" || ev.type === "context")) continue;
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";

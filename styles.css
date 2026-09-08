@@ -234,3 +234,9 @@
 .contexts-gone {
   cursor: default;
 }
+
+.contexts-context {
+  margin-top: 0;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+}

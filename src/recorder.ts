@@ -395,6 +395,17 @@ export interface RelateEvent {
   b: string;
 }
 
+/**
+ * The user declared what they are doing: "from now on I'm in context <name>".
+ * Empty name clears. Declaration captures the thing in the user's head that
+ * action alone cannot reveal; spans are assigned to contexts at read time.
+ */
+export interface ContextEvent {
+  t: number;
+  type: "context";
+  name: string;
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -403,7 +414,8 @@ export type LogEvent =
   | ExtModEvent
   | FirstSeenEvent
   | UnrelateEvent
-  | RelateEvent;
+  | RelateEvent
+  | ContextEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

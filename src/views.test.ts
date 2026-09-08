@@ -5,7 +5,10 @@ import {
   Stint,
   allRelationships,
   applyRenames,
+  assignContexts,
   coalesceTrail,
+  contextNames,
+  currentContext,
   excludeFolders,
   fileInterest,
   groupSessions,
@@ -259,6 +262,42 @@ describe("mergeDeltas", () => {
   it("shows word movement in both directions even when the net is zero", () => {
     expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toEqual({ wordsAdded: 5, wordsRemoved: 5 });
     expect(mergeDeltas([])).toBeUndefined();
+  });
+});
+
+describe("declared contexts", () => {
+  it("tracks the current context and clears on empty", () => {
+    const events: LogEvent[] = [
+      { t: 1, type: "context", name: "degree-design" },
+      { t: 2, type: "context", name: "teaching" },
+    ];
+    expect(currentContext(events)).toBe("teaching");
+    expect(currentContext([...events, { t: 3, type: "context", name: "" }])).toBeNull();
+    expect(contextNames(events)).toEqual(["teaching", "degree-design"]);
+  });
+
+  it("assigns spans to the context declared at their start", () => {
+    const events: LogEvent[] = [
+      span("Before.md", 0),
+      { t: 10 * MIN, type: "context", name: "alpha" },
+      span("During.md", 20 * MIN),
+      { t: 30 * MIN, type: "context", name: "" },
+      span("After.md", 40 * MIN),
+    ];
+    const assigned = assignContexts(events);
+    expect(assigned.get(events[0] as SpanEvent)).toBeUndefined();
+    expect(assigned.get(events[2] as SpanEvent)).toBe("alpha");
+    expect(assigned.get(events[4] as SpanEvent)).toBeUndefined();
+  });
+
+  it("passes context events through renames and folder exclusion untouched", () => {
+    const events: LogEvent[] = [
+      { t: 1, type: "context", name: "alpha" },
+      span("A.md", 2),
+      { t: 10 * MIN, type: "rename", from: "A.md", to: "B.md" },
+    ];
+    const out = excludeFolders(applyRenames(events), ["secret"]);
+    expect(out[0]).toMatchObject({ type: "context", name: "alpha" });
   });
 });
 

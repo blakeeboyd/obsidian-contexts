@@ -1,4 +1,4 @@
-import { App, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
+import { App, FuzzySuggestModal, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { DayBlock } from "./dayblock";
@@ -37,6 +37,8 @@ import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settin
 import {
   allRelationships,
   applyRenames,
+  contextNames,
+  currentContext,
   excludeFolders,
   groupSessions,
   healRenames,
@@ -171,6 +173,12 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "declare-context",
+      name: "Declare context",
+      callback: () => void this.openContextModal(),
+    });
+
+    this.addCommand({
       id: "insert-day-summary",
       name: "Insert or update day summary in current note",
       callback: () => void this.insertDaySummary(),
@@ -190,6 +198,17 @@ export default class ContextsPlugin extends Plugin {
         new Notice(`Contexts: recording ${this.settings.paused ? "paused" : "resumed"}`);
       },
     });
+  }
+
+  /** Declare (or clear, with "") the current context — a logged event like everything else. */
+  declareContext(name: string): void {
+    this.enqueue(() => this.record({ t: Date.now(), type: "context", name }));
+    new Notice(name ? `Context: ${name}` : "Context cleared");
+  }
+
+  async openContextModal(): Promise<void> {
+    const events = await this.getEvents();
+    new ContextModal(this.app, this, contextNames(events), currentContext(events)).open();
   }
 
   /** User feedback on a pair: related=false demotes it in scoring (never deletes); true restores. */
@@ -557,6 +576,37 @@ export default class ContextsPlugin extends Plugin {
 
     const body = events.slice(-100).reverse().map(fmtEvent).join("\n");
     new HistoryModal(this.app, header + related + "\n" + body).open();
+  }
+}
+
+const CLEAR_CONTEXT = "— no context —";
+
+/** Pick an existing context, type a new name, or clear. The cheap gesture the declared-context model depends on. */
+class ContextModal extends FuzzySuggestModal<string> {
+  constructor(
+    app: App,
+    private plugin: ContextsPlugin,
+    private names: string[],
+    private current: string | null
+  ) {
+    super(app);
+    this.setPlaceholder(this.current ? `Context: ${this.current} — switch to…` : "Declare a context…");
+  }
+
+  getItems(): string[] {
+    const items = this.names.slice();
+    const typed = this.inputEl?.value.trim();
+    if (typed && !items.includes(typed)) items.unshift(typed);
+    if (this.current) items.push(CLEAR_CONTEXT);
+    return items;
+  }
+
+  getItemText(item: string): string {
+    return item;
+  }
+
+  onChooseItem(item: string): void {
+    this.plugin.declareContext(item === CLEAR_CONTEXT ? "" : item);
   }
 }
 

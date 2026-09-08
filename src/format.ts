@@ -145,6 +145,7 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "firstseen" ? `first seen: ${ev.path} (${ev.counts.words}w, ${ev.counts.links} links)`
       : ev.type === "unrelate" ? `marked unrelated: ${ev.a} ✗ ${ev.b}`
       : ev.type === "relate" ? `relation restored: ${ev.a} + ${ev.b}`
+      : ev.type === "context" ? (ev.name ? `context → ${ev.name}` : "context cleared")
       : `external edit: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

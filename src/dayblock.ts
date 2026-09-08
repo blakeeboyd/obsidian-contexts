@@ -60,7 +60,10 @@ export class DayBlock extends MarkdownRenderChild {
     const engagedTotal = sessions.reduce((sum, x) => sum + x.spans.reduce((a, sp) => a + sp.dur, 0), 0);
     const files = new Set(dayEvents.filter(isSpan).map((sp) => sp.path));
     el.createDiv({
-      text: `${fmtDur(engagedTotal)} engaged · ${sessions.length} session${sessions.length === 1 ? "" : "s"} · ${files.size} file${files.size === 1 ? "" : "s"}`,
+      text: `${fmtDur(engagedTotal)} engaged · ${sessions.length} session${sessions.length === 1 ? "" : "s"} · ${files.size} file${files.size === 1 ? "" : "s"}${(() => {
+        const n = dayEvents.filter((ev) => "type" in ev && ev.type === "context").length;
+        return n ? ` · ${n} context switch${n === 1 ? "" : "es"}` : "";
+      })()}`,
       cls: "contexts-title",
     });
 

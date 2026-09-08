@@ -37,6 +37,7 @@ import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settin
 import {
   allRelationships,
   applyRenames,
+  contextFileSets,
   contextNames,
   currentContext,
   excludeFolders,
@@ -563,7 +564,7 @@ export default class ContextsPlugin extends Plugin {
     const activePath = this.recorder.activePath;
     if (activePath) {
       const halfLife = this.settings.halfLifeDays * 24 * 3600_000;
-      const top = relatedTo(activePath, sessions, Date.now(), halfLife).slice(0, 10);
+      const top = relatedTo(activePath, sessions, Date.now(), halfLife, undefined, contextFileSets(events)).slice(0, 10);
       if (top.length) {
         related =
           `\nRelated to ${activePath}:\n` +

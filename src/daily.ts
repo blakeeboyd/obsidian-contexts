@@ -34,6 +34,13 @@ export function dailyMarkdown(events: LogEvent[], dayStart: number, dayEnd: numb
   for (const ev of dayEvents) {
     if ("type" in ev && ev.type === "extmod") extmods.set(ev.path, (extmods.get(ev.path) ?? 0) + 1);
   }
+  const switches = dayEvents.filter(
+    (ev): ev is Extract<LogEvent, { type: "context" }> => "type" in ev && ev.type === "context"
+  );
+  for (const ev of switches) {
+    lines.push(`- ${fmtClock(ev.t)} context → ${ev.name || "(cleared)"}`);
+  }
+  if (switches.length) lines.push("");
   const created = dayEvents.filter((ev) => "type" in ev && ev.type === "create");
   if (created.length || extmods.size) {
     for (const ev of created) if ("path" in ev) lines.push(`- created ${wikilink(ev.path)}`);

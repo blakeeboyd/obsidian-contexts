@@ -7,6 +7,7 @@ import {
   applyRenames,
   assignContexts,
   coalesceTrail,
+  contextFileSets,
   contextNames,
   currentContext,
   excludeFolders,
@@ -298,6 +299,27 @@ describe("declared contexts", () => {
     ];
     const out = excludeFolders(applyRenames(events), ["secret"]);
     expect(out[0]).toMatchObject({ type: "context", name: "alpha" });
+  });
+});
+
+describe("shared declared context in scoring", () => {
+  it("boosts pairs the user assigned to the same context", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Me.md", MIN),
+      span("Partner.md", 90 * MIN), // far apart in time: adjacency alone is weak
+      span("Bystander.md", 95 * MIN),
+      { t: 200 * MIN, type: "context", name: "" },
+    ];
+    const sessions = groupSessions(events, 300 * MIN);
+    const ctx = contextFileSets(events);
+    const related = relatedTo("Me.md", sessions, 210 * MIN, undefined, undefined, ctx);
+    const partner = related.find((r) => r.path === "Partner.md")!;
+    const bystander = related.find((r) => r.path === "Bystander.md")!;
+    // Both got the context bonus (all three share "alpha"), so both clear the floor;
+    // the point is the bonus lifts far-apart-in-time companions the user grouped.
+    expect(partner.score).toBeGreaterThan(MIN_RELATED_SCORE);
+    expect(bystander.score).toBeGreaterThan(MIN_RELATED_SCORE);
   });
 });
 

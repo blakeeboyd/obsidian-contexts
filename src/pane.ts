@@ -11,6 +11,7 @@ import {
   allRelationships,
   applyRenames,
   coalesceTrail,
+  contextFileSets,
   currentContext,
   excludeFolders,
   fileInterest,
@@ -184,7 +185,7 @@ export class ContextsPane extends ItemView {
     // Dismissed pairs leave the list outright (the user said "not related");
     // pairs below the evidence floor never enter it (relatedness is a
     // conclusion, not a default — same-session alone doesn't clear the bar).
-    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed)
+    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(events))
       .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
       .slice(0, RELATED_LIMIT);
     if (!related.length) {

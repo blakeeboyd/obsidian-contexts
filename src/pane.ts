@@ -96,9 +96,23 @@ const RELATIONSHIPS_LIMIT = 30;
 export class ContextsPane extends ItemView {
   // Transient: survives the pane's frequent re-renders, resets with the session.
   private relationshipsOpen = false;
+  // Focusing the pane closes the active file's span, which logs an event,
+  // which re-renders the pane — destroying the element mid-click (mousedown
+  // and mouseup must land on the same node). Hold renders while a pointer is
+  // down inside the pane; flush on release.
+  private pointerHeld = false;
+  private renderQueued = false;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
+    this.registerDomEvent(this.containerEl, "pointerdown", () => (this.pointerHeld = true));
+    this.registerDomEvent(window, "pointerup", () => {
+      this.pointerHeld = false;
+      if (this.renderQueued) {
+        this.renderQueued = false;
+        void this.render();
+      }
+    });
   }
 
   getViewType(): string {
@@ -118,6 +132,10 @@ export class ContextsPane extends ItemView {
   }
 
   async render(): Promise<void> {
+    if (this.pointerHeld) {
+      this.renderQueued = true;
+      return;
+    }
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("contexts-pane");

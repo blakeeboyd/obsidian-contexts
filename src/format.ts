@@ -49,6 +49,32 @@ export function fmtDelta(e: EditDelta): string {
   return parts.join(", ");
 }
 
+/** Full detail of a delta, one item per line: the actual names, text, and values. */
+export function fmtDeltaVerbose(e: EditDelta): string {
+  const lines: string[] = [];
+  const num = (n: number) => `${n > 0 ? "+" : ""}${n}`;
+  if (e.words) lines.push(`words ${num(e.words)}`);
+  const list = (label: string, added?: string[], removed?: string[]) => {
+    if (added?.length) lines.push(`${label} added: ${added.join(", ")}`);
+    if (removed?.length) lines.push(`${label} removed: ${removed.join(", ")}`);
+  };
+  list("links", e.linksAdded, e.linksRemoved);
+  list("tags", e.tagsAdded, e.tagsRemoved);
+  list("headings", e.headingsAdded, e.headingsRemoved);
+  if (e.headingsChanged) lines.push("headings reordered");
+  list("highlights", e.highlightsAdded, e.highlightsRemoved);
+  list("footnotes", e.footnotesAdded, e.footnotesRemoved);
+  if (e.bold) lines.push(`bold ${num(e.bold)}`);
+  if (e.italic) lines.push(`italic ${num(e.italic)}`);
+  if (e.fmChanged) {
+    if (Array.isArray(e.fmChanged)) lines.push(`frontmatter: ${e.fmChanged.join(", ")}`);
+    else
+      for (const [k, [before, after]] of Object.entries(e.fmChanged))
+        lines.push(`frontmatter ${k}: ${before ?? "(none)"} → ${after ?? "(none)"}`);
+  }
+  return lines.join("\n");
+}
+
 export function fmtEvent(ev: LogEvent): string {
   if (!isSpan(ev)) {
     const desc =
@@ -58,7 +84,7 @@ export function fmtEvent(ev: LogEvent): string {
       : `external edit: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }
-  const delta = ev.edit ? fmtDelta(ev.edit) : "";
+  const delta = ev.edit ? fmtDeltaVerbose(ev.edit).split("\n").join("; ") : "";
   const edit = delta ? `  (${delta})` : "";
   return `${fmtTime(ev.start)}  ${fmtDur(ev.dur).padStart(5)}  ${ev.path}${edit}`;
 }

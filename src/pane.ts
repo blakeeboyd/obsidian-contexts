@@ -1,5 +1,5 @@
 import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
-import { fmtDelta, fmtDur, fmtTime, relTime } from "./format";
+import { fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
@@ -80,7 +80,10 @@ export class ContextsPane extends ItemView {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
         row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
         const delta = ev.edit ? fmtDelta(ev.edit) : "";
-        if (delta) row.createDiv({ text: delta, cls: "contexts-trail-delta" });
+        if (delta && ev.edit) {
+          const deltaEl = row.createDiv({ text: delta, cls: "contexts-trail-delta" });
+          deltaEl.setAttribute("title", fmtDeltaVerbose(ev.edit)); // hover for names and values
+        }
       } else {
         const label =
           ev.type === "create" ? "created"

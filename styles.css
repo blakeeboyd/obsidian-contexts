@@ -62,11 +62,38 @@
 }
 
 .contexts-trail-details {
-  white-space: pre-line;
   color: var(--text-muted);
   font-size: 11px;
   margin-top: 3px;
   padding-left: 8px;
   border-left: 2px solid var(--background-modifier-border);
   user-select: text;
+}
+
+.contexts-details-header {
+  margin-bottom: 3px;
+  font-weight: 600;
+}
+
+.contexts-span-line {
+  display: grid;
+  grid-template-columns: 38px 44px 1fr;
+  gap: 6px;
+  padding: 1px 0;
+  align-items: baseline;
+}
+
+.contexts-span-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.contexts-span-delta {
+  color: var(--text-normal);
+  font-size: 11px;
+}
+
+.contexts-span-read {
+  color: var(--text-faint);
+  font-style: italic;
 }

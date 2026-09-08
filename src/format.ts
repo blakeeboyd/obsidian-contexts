@@ -6,6 +6,12 @@ export function fmtTime(t: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
+/** Time of day only (HH:MM), for lists where the date is already established. */
+export function fmtClock(t: number): string {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 export function fmtDur(ms: number): string {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;

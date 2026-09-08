@@ -1,5 +1,5 @@
 import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
-import { fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
+import { fmtClock, fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
@@ -80,12 +80,23 @@ export class ContextsPane extends ItemView {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
         row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
         if (ev.edit) row.createDiv({ text: fmtDelta(ev.edit), cls: "contexts-trail-delta" });
-        // Click to expand: the stint's full story (range, engaged time, what changed).
-        const lines = [
-          `${fmtTime(ev.start)} → ${fmtTime(ev.end)} · ${fmtDur(ev.dur)} engaged · ${ev.count} visit${ev.count === 1 ? "" : "s"}`,
-        ];
-        if (ev.edit) lines.push(fmtDeltaVerbose(ev.edit));
-        const details = row.createDiv({ cls: "contexts-trail-details", text: lines.join("\n") });
+        // Click to expand: every visit, chronological — time, length, what changed then.
+        const details = row.createDiv({ cls: "contexts-trail-details" });
+        details.createDiv({
+          text: `${fmtClock(ev.start)} → ${fmtClock(ev.end)} · ${fmtDur(ev.dur)} engaged · ${ev.count} visit${ev.count === 1 ? "" : "s"}`,
+          cls: "contexts-details-header",
+        });
+        for (const span of ev.spans) {
+          const line = details.createDiv({ cls: "contexts-span-line" });
+          line.createDiv({ text: fmtClock(span.start), cls: "contexts-span-time" });
+          line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
+          if (span.edit) {
+            const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
+            for (const part of fmtDeltaVerbose(span.edit).split("\n")) deltaEl.createDiv({ text: part });
+          } else {
+            line.createDiv({ text: "read", cls: "contexts-span-read" });
+          }
+        }
         details.hidden = true;
         row.addClass("contexts-expandable");
         row.addEventListener("click", () => (details.hidden = !details.hidden));

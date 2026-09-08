@@ -134,7 +134,6 @@ export class ContextsPane extends ItemView {
     const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderSessions(contentEl, sessions);
-      this.renderHiddenConnections(contentEl, sessions, unrelatedPairs(events));
       return;
     }
 
@@ -250,20 +249,20 @@ export class ContextsPane extends ItemView {
    */
   /**
    * The pane surfaces only what the user hid: dismissed pairs, restorable.
-   * Scoped to the current file when one is open — a pair between two other
-   * files has no business at the bottom of this file's pane. The global list
-   * shows in the sessions view and the "Show all relationships" command.
+   * Scoped to the current file — a pair between two other files has no
+   * business at the bottom of this file's pane. The global view lives only
+   * behind the "Show all relationships" command.
    */
   private renderHiddenConnections(
     contentEl: HTMLElement,
     sessions: Session[],
     dismissed: Set<string>,
-    path?: string
+    path: string
   ): void {
     if (!dismissed.size) return;
     const s = this.plugin.settings;
     const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed).filter(
-      (p) => p.dismissed && (!path || p.a === path || p.b === path)
+      (p) => p.dismissed && (p.a === path || p.b === path)
     );
     if (!pairs.length) return;
     const label = (open: boolean) => (open ? "Hide hidden connections" : `See hidden connections (${pairs.length})`);

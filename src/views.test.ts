@@ -6,6 +6,7 @@ import {
   allRelationships,
   applyRenames,
   coalesceTrail,
+  excludeFolders,
   groupSessions,
   healRenames,
   isStint,
@@ -257,6 +258,28 @@ describe("mergeDeltas", () => {
   it("shows word movement in both directions even when the net is zero", () => {
     expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toEqual({ wordsAdded: 5, wordsRemoved: 5 });
     expect(mergeDeltas([])).toBeUndefined();
+  });
+});
+
+describe("excludeFolders", () => {
+  it("drops events for excluded files, strips them as traversal sources, keeps the rest", () => {
+    const linked: SpanEvent = { ...span("Keep.md", 20 * MIN), from: "secret/Diary.md" };
+    const events: LogEvent[] = [
+      span("Keep.md", 0),
+      span("secret/Diary.md", 6 * MIN),
+      { t: 12 * MIN, type: "extmod", path: "secret/Diary.md" },
+      linked,
+      { t: 30 * MIN, type: "unrelate", a: "Keep.md", b: "secret/Diary.md" },
+    ];
+    const out = excludeFolders(events, ["secret"]);
+    expect(out).toHaveLength(2);
+    expect(out.every((ev) => "path" in ev && ev.path === "Keep.md")).toBe(true);
+    expect((out[1] as SpanEvent).from).toBeUndefined(); // mention stripped, span kept
+  });
+
+  it("returns events untouched with no excluded folders", () => {
+    const events = [span("A.md", 0)];
+    expect(excludeFolders(events, [])).toBe(events);
   });
 });
 

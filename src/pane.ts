@@ -10,6 +10,7 @@ import {
   allRelationships,
   applyRenames,
   coalesceTrail,
+  excludeFolders,
   groupSessions,
   healRenames,
   isStint,
@@ -142,7 +143,7 @@ export class ContextsPane extends ItemView {
     contentEl.addClass("contexts-pane");
 
     const s = this.plugin.settings;
-    const events = applyRenames(healRenames(await this.plugin.getEvents()));
+    const events = excludeFolders(applyRenames(healRenames(await this.plugin.getEvents())), s.excludedFolders);
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
 
     // Sticky path only counts while a note is actually open somewhere AND

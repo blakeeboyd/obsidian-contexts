@@ -22,7 +22,15 @@ import {
   stripCodeFences,
 } from "./recorder";
 import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
-import { allRelationships, applyRenames, groupSessions, healRenames, relatedTo, unrelatedPairs } from "./views";
+import {
+  allRelationships,
+  applyRenames,
+  excludeFolders,
+  groupSessions,
+  healRenames,
+  relatedTo,
+  unrelatedPairs,
+} from "./views";
 
 // A modify event on a path this soon after its span closed is the editor's
 // trailing autosave, not an external edit.
@@ -422,7 +430,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async showRelationships(): Promise<void> {
-    const events = applyRenames(healRenames(await this.getEvents()));
+    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
     const sessions = groupSessions(events, this.settings.sessionGapMin * 60_000);
     const pairs = allRelationships(
       sessions,
@@ -434,7 +442,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = applyRenames(healRenames(await this.getEvents()));
+    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
     if (!events.length) {
       new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
       return;

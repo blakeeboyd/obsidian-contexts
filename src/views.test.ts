@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
 import {
   Stint,
+  allRelationships,
   applyRenames,
   coalesceTrail,
   groupSessions,
@@ -259,6 +260,18 @@ describe("relatedness feedback", () => {
     expect(related[1].path).toBe("Noise.md");
     expect(related[1].dismissed).toBe(true);
     expect(related[1].score).toBeLessThan(related[0].score * 0.1);
+  });
+
+  it("ranks all pairs globally with dismissed ones demoted but present", () => {
+    const events = [span("A.md", 0), span("B.md", 6 * MIN), span("C.md", 12 * MIN)];
+    const dismissed = new Set([pairKey("A.md", "C.md")]);
+    const pairs = allRelationships(groupSessions(events), 20 * MIN, undefined, dismissed);
+    expect(pairs).toHaveLength(3); // AB, AC, BC
+    const ac = pairs.find((p) => p.dismissed);
+    expect(ac?.a).toBe("A.md");
+    expect(ac?.b).toBe("C.md");
+    expect(ac?.score).toBeCloseTo(ac!.rawScore * 0.05);
+    expect(pairs[pairs.length - 1]).toBe(ac); // demotion sinks it to the bottom
   });
 
   it("follows renames on both sides of the pair", () => {

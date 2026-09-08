@@ -179,3 +179,20 @@
 .contexts-row-action:hover {
   color: var(--text-normal);
 }
+
+.contexts-reveal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 4px 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.contexts-reveal:hover {
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+}

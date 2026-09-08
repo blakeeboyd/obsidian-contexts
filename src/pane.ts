@@ -4,7 +4,9 @@ import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./f
 import type ContextsPlugin from "./main";
 import {
   PAIR_SEP,
+  PairScore,
   Session,
+  allRelationships,
   applyRenames,
   coalesceTrail,
   groupSessions,
@@ -24,8 +26,12 @@ const TRAIL_LIMIT = 30;
 // per-session drill-down) is ticket 05.0302; this is the lazy version.
 const SESSION_LIMIT = 5;
 const FILES_PER_SESSION = 12;
+const RELATIONSHIPS_LIMIT = 30;
 
 export class ContextsPane extends ItemView {
+  // Transient: survives the pane's frequent re-renders, resets with the session.
+  private relationshipsOpen = false;
+
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
   }
@@ -63,6 +69,7 @@ export class ContextsPane extends ItemView {
     const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderSessions(contentEl, sessions);
+      this.renderRelationships(contentEl, sessions, unrelatedPairs(events));
       return;
     }
 
@@ -90,6 +97,7 @@ export class ContextsPane extends ItemView {
       });
     }
     this.renderDismissed(contentEl, path, dismissed, related);
+    this.renderRelationships(contentEl, sessions, dismissed);
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
@@ -176,6 +184,61 @@ export class ContextsPane extends ItemView {
    * right-aligned meta. Hover shows Obsidian's page preview; right-click
    * opens the native file menu.
    */
+  /**
+   * The audit view of the relationship model: every pair ranked by effective
+   * score, dismissed ones showing raw → demoted. Out of the way by default —
+   * one "See connections" reveal at the pane's bottom.
+   */
+  private renderRelationships(contentEl: HTMLElement, sessions: Session[], dismissed: Set<string>): void {
+    const s = this.plugin.settings;
+    const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed);
+    if (!pairs.length) return;
+    const toggle = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable" });
+    setIcon(toggle.createSpan({ cls: "contexts-chip-icon" }), "network");
+    toggle.createSpan({ text: this.relationshipsOpen ? "Hide connections" : "See connections" });
+    const list = contentEl.createDiv();
+    list.hidden = !this.relationshipsOpen;
+    toggle.addEventListener("click", () => {
+      this.relationshipsOpen = !this.relationshipsOpen;
+      list.hidden = !this.relationshipsOpen;
+      toggle.lastChild!.textContent = this.relationshipsOpen ? "Hide connections" : "See connections";
+    });
+    const shown = pairs.slice(0, RELATIONSHIPS_LIMIT);
+    for (const p of pairs.slice(RELATIONSHIPS_LIMIT)) if (p.dismissed) shown.push(p); // demoted pairs always auditable
+    for (const p of shown) this.pairRow(list, p);
+    if (pairs.length > shown.length) {
+      list.createDiv({ text: `top ${shown.length} of ${pairs.length}`, cls: "contexts-empty" });
+    }
+  }
+
+  private pairRow(container: HTMLElement, p: PairScore): void {
+    const row = container.createDiv({ cls: "contexts-row" });
+    const title = row.createDiv({ cls: "contexts-row-title" });
+    const base = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+    const nameSpan = (path: string) => {
+      const el = title.createSpan({ text: base(path), cls: "contexts-link" });
+      el.setAttribute("title", path);
+      el.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        this.openPath(path, evt);
+      });
+    };
+    nameSpan(p.a);
+    title.createSpan({ text: " ↔ " });
+    nameSpan(p.b);
+    const meta = p.dismissed
+      ? `${p.rawScore.toFixed(2)} → ${p.score.toFixed(2)} · marked unrelated · ${p.sharedSessions} shared`
+      : `${p.score.toFixed(2)} · ${p.sharedSessions} shared · ${relTime(p.lastAt)}`;
+    row.createDiv({ text: meta, cls: "contexts-row-meta" });
+    const btn = row.createDiv({ cls: "contexts-row-action" });
+    setIcon(btn, p.dismissed ? "rotate-ccw" : "x");
+    btn.setAttribute("title", p.dismissed ? "Restore the connection" : "Not related: weight near zero");
+    btn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.plugin.markRelated(p.a, p.b, p.dismissed);
+    });
+  }
+
   /**
    * Dismissed pairs not visible in the ranking (demotion usually pushes them
    * out of the top rows) still need a restore path: a quiet expandable list.

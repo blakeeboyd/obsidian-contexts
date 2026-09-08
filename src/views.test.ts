@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
-import { applyRenames, groupSessions, healRenames, relatedTo, trailFor } from "./views";
+import { Stint, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, mergeDeltas, relatedTo, trailFor } from "./views";
 
 const MIN = 60_000;
 
@@ -157,6 +157,54 @@ describe("relatedTo", () => {
     expect(related).toHaveLength(1);
     expect(related[0].path).toBe("Other.md");
     expect(related[0].score).toBeGreaterThan(0);
+  });
+});
+
+describe("coalesceTrail", () => {
+  it("merges adjacent spans into one stint with summed engaged time", () => {
+    const trail = [span("A.md", 0, 2 * MIN), span("A.md", 5 * MIN, 3 * MIN), span("A.md", 10 * MIN, MIN)];
+    const out = coalesceTrail(trail, 30 * MIN);
+    expect(out).toHaveLength(1);
+    const stint = out[0] as Stint;
+    expect(stint.count).toBe(3);
+    expect(stint.dur).toBe(6 * MIN); // engaged time, not the 11-minute wall-clock spread
+    expect(stint.start).toBe(0);
+    expect(stint.end).toBe(11 * MIN);
+  });
+
+  it("splits stints on gaps and keeps other events as their own rows", () => {
+    const trail: LogEvent[] = [
+      span("A.md", 0),
+      { t: 10 * MIN, type: "extmod", path: "A.md" },
+      span("A.md", 20 * MIN),
+      span("A.md", 120 * MIN),
+    ];
+    const out = coalesceTrail(trail, 30 * MIN);
+    expect(out.map((i) => (isStint(i) ? "stint" : i.type))).toEqual(["stint", "extmod", "stint", "stint"]);
+  });
+
+  it("merges edit deltas across a stint's spans", () => {
+    const trail = [
+      { ...span("A.md", 0), edit: { words: 10, linksAdded: ["X"] } },
+      { ...span("A.md", 6 * MIN), edit: { words: -3, linksAdded: ["Y"], linksRemoved: ["X"] } },
+    ];
+    const stint = coalesceTrail(trail, 30 * MIN)[0] as Stint;
+    expect(stint.edit).toEqual({ words: 7, linksAdded: ["Y"] }); // X added then removed nets out
+  });
+});
+
+describe("mergeDeltas", () => {
+  it("keeps first-before and last-after for frontmatter, dropping keys that net out", () => {
+    const merged = mergeDeltas([
+      { fmChanged: { status: ['"draft"', '"review"'], tier: [null, '"1"'] } },
+      { fmChanged: { status: ['"review"', '"done"'], tier: ['"1"', null] } },
+    ]);
+    expect(merged).toEqual({ fmChanged: { status: ['"draft"', '"done"'] } });
+  });
+
+  it("returns undefined when everything cancels", () => {
+    expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toBeUndefined();
+    expect(mergeDeltas([])).toBeUndefined();
   });
 });
 

@@ -1,8 +1,7 @@
 import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
 import { fmtDelta, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
-import { isSpan } from "./recorder";
-import { applyRenames, groupSessions, healRenames, relatedTo, trailFor } from "./views";
+import { applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
 export const CONTEXTS_VIEW_TYPE = "contexts-pane";
 
@@ -71,14 +70,15 @@ export class ContextsPane extends ItemView {
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
-    const trail = trailFor(path, events).slice(-TRAIL_LIMIT).reverse();
+    const trail = coalesceTrail(trailFor(path, events), s.sessionGapMin * 60_000).slice(-TRAIL_LIMIT).reverse();
     if (!trail.length) {
       contentEl.createDiv({ text: "No history yet for this file.", cls: "contexts-empty" });
     }
     for (const ev of trail) {
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
-      if (isSpan(ev)) {
-        row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}` });
+      if (isStint(ev)) {
+        const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
+        row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
         const delta = ev.edit ? fmtDelta(ev.edit) : "";
         if (delta) row.createDiv({ text: delta, cls: "contexts-trail-delta" });
       } else {

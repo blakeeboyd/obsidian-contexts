@@ -128,3 +128,23 @@
   align-items: center;
   gap: 3px;
 }
+
+.contexts-row-title {
+  font-size: 13px;
+}
+
+.contexts-row-metaline {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.contexts-row-folder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contexts-row-when {
+  flex-shrink: 0;
+}

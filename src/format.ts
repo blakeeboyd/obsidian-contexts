@@ -6,6 +6,17 @@ export function fmtTime(t: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
 
+/** "Today", "Yesterday", or M/D for older dates. */
+export function relDay(t: number, now = Date.now()): string {
+  const d = new Date(t);
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const n = new Date(now);
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  if (day === today) return "Today";
+  if (today - day <= 24 * 3600_000) return "Yesterday";
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
 /** Time of day only (HH:MM), for lists where the date is already established. */
 export function fmtClock(t: number): string {
   const d = new Date(t);

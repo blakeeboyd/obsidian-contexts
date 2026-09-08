@@ -1,6 +1,6 @@
-import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type { EditDelta } from "./recorder";
-import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
+import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { Session, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
@@ -66,14 +66,7 @@ export class ContextsPane extends ItemView {
       });
     }
     for (const r of related) {
-      const row = contentEl.createDiv({ cls: "contexts-row" });
-      row.createDiv({ text: r.path.split("/").pop()?.replace(/\.md$/, "") ?? r.path });
-      row.createDiv({
-        text: `${r.sharedSessions} shared session${r.sharedSessions === 1 ? "" : "s"} · ${relTime(r.lastAt)}`,
-        cls: "contexts-row-meta",
-      });
-      row.setAttribute("aria-label", r.path);
-      row.addEventListener("click", (evt) => this.openPath(r.path, evt));
+      this.fileRow(contentEl, r.path, `${r.sharedSessions} shared · ${relTime(r.lastAt)}`);
     }
 
     // Trail: this file's own history, newest first.
@@ -138,6 +131,39 @@ export class ContextsPane extends ItemView {
     }
   }
 
+  /**
+   * A clickable two-line file row: title, then muted folder path with
+   * right-aligned meta. Hover shows Obsidian's page preview; right-click
+   * opens the native file menu.
+   */
+  private fileRow(container: HTMLElement, path: string, meta: string): void {
+    const row = container.createDiv({ cls: "contexts-row" });
+    row.createDiv({ text: path.split("/").pop()?.replace(/\.md$/, "") ?? path, cls: "contexts-row-title" });
+    const metaLine = row.createDiv({ cls: "contexts-row-meta contexts-row-metaline" });
+    const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+    metaLine.createSpan({ text: folder, cls: "contexts-row-folder" });
+    if (meta) metaLine.createSpan({ text: meta, cls: "contexts-row-when" });
+    row.setAttribute("aria-label", path);
+    row.addEventListener("click", (evt) => this.openPath(path, evt));
+    row.addEventListener("mouseover", (evt) => {
+      this.app.workspace.trigger("hover-link", {
+        event: evt,
+        source: CONTEXTS_VIEW_TYPE,
+        hoverParent: this,
+        targetEl: row,
+        linktext: path,
+      });
+    });
+    row.addEventListener("contextmenu", (evt) => {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!(file instanceof TFile)) return;
+      evt.preventDefault();
+      const menu = new Menu();
+      this.app.workspace.trigger("file-menu", menu, file, CONTEXTS_VIEW_TYPE);
+      menu.showAtMouseEvent(evt);
+    });
+  }
+
   /** No note open: show the last few sessions and the files each touched. */
   private renderSessions(contentEl: HTMLElement, sessions: Session[]): void {
     contentEl.createDiv({ text: "Recent sessions", cls: "contexts-title" });
@@ -148,14 +174,11 @@ export class ContextsPane extends ItemView {
     for (const sess of sessions.slice(-SESSION_LIMIT).reverse()) {
       const engaged = sess.spans.reduce((sum, sp) => sum + sp.dur, 0);
       contentEl.createDiv({
-        text: `${fmtTime(sess.start)} → ${fmtClock(sess.end)} · ${fmtDur(engaged)} engaged`,
+        text: `${relDay(sess.start)} · ${fmtClock(sess.start)} → ${fmtClock(sess.end)} · ${fmtDur(engaged)} engaged`,
         cls: "contexts-section",
       });
       for (const f of sess.files.slice(0, FILES_PER_SESSION)) {
-        const row = contentEl.createDiv({ cls: "contexts-row" });
-        row.createDiv({ text: f.split("/").pop()?.replace(/\.md$/, "") ?? f });
-        row.setAttribute("aria-label", f);
-        row.addEventListener("click", (evt) => this.openPath(f, evt));
+        this.fileRow(contentEl, f, "");
       }
       if (sess.files.length > FILES_PER_SESSION) {
         contentEl.createDiv({ text: `+${sess.files.length - FILES_PER_SESSION} more`, cls: "contexts-empty" });

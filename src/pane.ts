@@ -38,8 +38,8 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   title.createSpan({ text: " ↔ " });
   nameSpan(p.b);
   const meta = p.dismissed
-    ? `${p.dismissedAt ? `hidden ${fmtTime(p.dismissedAt)}` : "hidden"} · ${p.sharedSessions} shared`
-    : `${p.score.toFixed(2)} · ${p.sharedSessions} shared · ${relTime(p.lastAt)}`;
+    ? `${p.dismissedAt ? `hidden ${fmtTime(p.dismissedAt)}` : "hidden"} · ${p.sharedSessions} session${p.sharedSessions === 1 ? "" : "s"}`
+    : `${p.score.toFixed(2)} · ${p.sharedSessions} session${p.sharedSessions === 1 ? "" : "s"} · ${relTime(p.lastAt)}`;
   row.createDiv({ text: meta, cls: "contexts-row-meta" });
   const btn = row.createDiv({ cls: "contexts-row-action" });
   setIcon(btn, p.dismissed ? "rotate-ccw" : "x");
@@ -176,7 +176,7 @@ export class ContextsPane extends ItemView {
       });
     }
     for (const r of related) {
-      this.fileRow(contentEl, r.path, `${r.sharedSessions} shared · ${relTime(r.lastAt)}`, {
+      this.fileRow(contentEl, r.path, `${r.sharedSessions} session${r.sharedSessions === 1 ? "" : "s"} · ${relTime(r.lastAt)}`, {
         icon: "x",
         tooltip: "Not related: keep tracking, but weight this connection near zero",
         onClick: () => this.plugin.markRelated(path, r.path, false),

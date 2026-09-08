@@ -94,8 +94,9 @@ export class ContextsPane extends ItemView {
           text: `${fmtClock(ev.start)} → ${fmtClock(ev.end)} · ${fmtDur(ev.dur)} engaged · ${ev.count} visit${ev.count === 1 ? "" : "s"}`,
           cls: "contexts-details-header",
         });
-        for (let i = 0; i < ev.spans.length; ) {
-          const span = ev.spans[i];
+        const visits = s.trailDetailNewestFirst ? [...ev.spans].reverse() : ev.spans;
+        for (let i = 0; i < visits.length; ) {
+          const span = visits[i];
           const line = details.createDiv({ cls: "contexts-span-line" });
           line.createDiv({ text: fmtClock(span.start), cls: "contexts-span-time" });
           if (span.edit) {
@@ -106,7 +107,7 @@ export class ContextsPane extends ItemView {
             // Consecutive read-only visits collapse to one line; they're context, not content.
             let j = i;
             let readDur = 0;
-            while (j < ev.spans.length && !ev.spans[j].edit) readDur += ev.spans[j++].dur;
+            while (j < visits.length && !visits[j].edit) readDur += visits[j++].dur;
             line.createDiv({ text: fmtDur(readDur), cls: "contexts-span-time" });
             line.createDiv({ text: j - i > 1 ? `read ×${j - i}` : "read", cls: "contexts-span-read" });
             i = j;

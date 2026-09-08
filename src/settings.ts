@@ -45,6 +45,7 @@ export interface ContextsSettings {
   idleTimeoutMin: number; // 0 disables idle detection
   sessionGapMin: number;
   halfLifeDays: number;
+  trailDetailNewestFirst: boolean;
   paused: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
 }
@@ -66,6 +67,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   idleTimeoutMin: 15,
   sessionGapMin: 30,
   halfLifeDays: 30,
+  trailDetailNewestFirst: true,
   paused: false,
   excludedFolders: [],
 };
@@ -145,6 +147,18 @@ export class ContextsSettingTab extends PluginSettingTab {
           })
         );
     }
+
+    new Setting(containerEl).setName("Display").setHeading();
+
+    new Setting(containerEl)
+      .setName("Newest visits first")
+      .setDesc("Inside an expanded session, list visits from newest to oldest. Off lists them chronologically.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.trailDetailNewestFirst).onChange(async (v) => {
+          this.plugin.settings.trailDetailNewestFirst = v;
+          await this.plugin.saveSettings();
+        })
+      );
 
     new Setting(containerEl).setName("Time").setHeading();
 

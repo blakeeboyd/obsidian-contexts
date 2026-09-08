@@ -201,3 +201,7 @@
   max-height: 60vh;
   overflow-y: auto;
 }
+
+.contexts-baseline-item {
+  padding-left: 12px;
+}

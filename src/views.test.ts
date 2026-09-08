@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
 import {
+  MIN_RELATED_SCORE,
   Stint,
   allRelationships,
   applyRenames,
@@ -183,6 +184,25 @@ describe("relatedTo", () => {
     expect(related).toHaveLength(1);
     expect(related[0].path).toBe("Other.md");
     expect(related[0].score).toBeGreaterThan(0);
+  });
+
+  it("grades temporal adjacency: a direct switch far outscores same-session distance", () => {
+    // Adjacent.md right after Me.md; Distant.md 25 minutes later in the same session.
+    const events = [span("Me.md", 0), span("Adjacent.md", 6 * MIN), span("Distant.md", 30 * MIN)];
+    const related = relatedTo("Me.md", groupSessions(events, 60 * MIN), 40 * MIN);
+    const adjacent = related.find((r) => r.path === "Adjacent.md")!;
+    const distant = related.find((r) => r.path === "Distant.md")!;
+    expect(adjacent.score).toBeGreaterThan(MIN_RELATED_SCORE);
+    expect(distant.score).toBeLessThan(MIN_RELATED_SCORE); // falls under the display floor
+    expect(adjacent.score).toBeGreaterThan(distant.score * 5);
+  });
+
+  it("a followed link outranks any incidental co-presence", () => {
+    const clicked: SpanEvent = { ...span("Target.md", 12 * MIN), from: "Me.md" };
+    const events = [span("Me.md", 0), span("Bystander.md", 6 * MIN), clicked];
+    const related = relatedTo("Me.md", groupSessions(events, 60 * MIN), 20 * MIN);
+    expect(related[0].path).toBe("Target.md");
+    expect(related[0].score).toBeGreaterThan(related.find((r) => r.path === "Bystander.md")!.score);
   });
 });
 

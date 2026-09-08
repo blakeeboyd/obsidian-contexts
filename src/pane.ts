@@ -3,6 +3,7 @@ import type { EditDelta } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import {
+  MIN_RELATED_SCORE,
   PairScore,
   Session,
   UNRELATED_WEIGHT,
@@ -162,10 +163,11 @@ export class ContextsPane extends ItemView {
     contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
     const halfLife = s.halfLifeDays * 24 * 3600_000;
     const dismissed = unrelatedPairs(events);
-    // Dismissed pairs leave the list outright (not merely demoted): the user
-    // said "not related," and they remain reachable under hidden connections.
+    // Dismissed pairs leave the list outright (the user said "not related");
+    // pairs below the evidence floor never enter it (relatedness is a
+    // conclusion, not a default — same-session alone doesn't clear the bar).
     const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed)
-      .filter((r) => !r.dismissed)
+      .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
       .slice(0, RELATED_LIMIT);
     if (!related.length) {
       contentEl.createDiv({
@@ -252,8 +254,19 @@ export class ContextsPane extends ItemView {
           details.createDiv({
             text: `already had: ${c.words} words · ${c.headings} headings · ${c.highlights} highlights · ${c.footnotes} footnotes · ${c.tasksOpen + c.tasksDone} tasks`,
           });
-          if (ev.links?.length) this.linkLine(details, `links (${ev.links.length})`, ev.links, ev.path);
-          if (ev.tags?.length) details.createDiv({ text: `tags: ${ev.tags.join(", ")}` });
+          if (ev.links?.length) {
+            details.createDiv({ text: `links (${ev.links.length}):` });
+            for (const target of ev.links) {
+              const line = details.createDiv({ cls: "contexts-baseline-item" });
+              const link = line.createSpan({ text: target, cls: "contexts-link" });
+              link.addEventListener("click", (evt) => {
+                evt.stopPropagation();
+                const dest = this.app.metadataCache.getFirstLinkpathDest(target, ev.path);
+                if (dest) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(dest);
+              });
+            }
+          }
+          if (ev.tags?.length) this.tagLine(details, "tags", ev.tags);
         }
         details.hidden = true;
         row.addClass("contexts-expandable");
@@ -462,11 +475,37 @@ export class ContextsPane extends ItemView {
     });
   }
 
-  /** A visit's changes: link names render as clickable links to their files; everything else as text. */
+  /** Tags open Obsidian's search for the tag, like a tag in a document body. */
+  private tagLine(el: HTMLElement, label: string, tags: string[]): void {
+    if (!tags.length) return;
+    const div = el.createDiv();
+    div.createSpan({ text: `${label}: ` });
+    tags.forEach((tag, idx) => {
+      if (idx) div.createSpan({ text: ", " });
+      const span = div.createSpan({ text: tag, cls: "contexts-link" });
+      span.setAttribute("title", `Search ${tag}`);
+      span.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        // ponytail: internal global-search API — the same thing a body tag click uses.
+        const search = (
+          this.app as unknown as {
+            internalPlugins?: {
+              getPluginById?: (id: string) => { instance?: { openGlobalSearch?: (q: string) => void } } | null;
+            };
+          }
+        ).internalPlugins?.getPluginById?.("global-search")?.instance;
+        search?.openGlobalSearch?.(`tag:${tag}`);
+      });
+    });
+  }
+
+  /** A visit's changes: link names render as clickable links, tags as search links; everything else as text. */
   private renderDelta(el: HTMLElement, edit: EditDelta, sourcePath: string): void {
     for (const part of fmtDeltaVerbose(edit).split("\n")) {
       if (part.startsWith("links added:")) this.linkLine(el, "links added", edit.linksAdded ?? [], sourcePath);
       else if (part.startsWith("links removed:")) this.linkLine(el, "links removed", edit.linksRemoved ?? [], sourcePath);
+      else if (part.startsWith("tags added:")) this.tagLine(el, "tags added", edit.tagsAdded ?? []);
+      else if (part.startsWith("tags removed:")) this.tagLine(el, "tags removed", edit.tagsRemoved ?? []);
       else el.createDiv({ text: part });
     }
   }

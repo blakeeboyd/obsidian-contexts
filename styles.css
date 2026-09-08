@@ -97,3 +97,12 @@
   color: var(--text-faint);
   font-style: italic;
 }
+
+.contexts-link {
+  color: var(--link-color, var(--text-accent));
+  cursor: pointer;
+}
+
+.contexts-link:hover {
+  text-decoration: underline;
+}

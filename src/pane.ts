@@ -1,4 +1,5 @@
 import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
+import type { EditDelta } from "./recorder";
 import { fmtClock, fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
@@ -86,15 +87,22 @@ export class ContextsPane extends ItemView {
           text: `${fmtClock(ev.start)} → ${fmtClock(ev.end)} · ${fmtDur(ev.dur)} engaged · ${ev.count} visit${ev.count === 1 ? "" : "s"}`,
           cls: "contexts-details-header",
         });
-        for (const span of ev.spans) {
+        for (let i = 0; i < ev.spans.length; ) {
+          const span = ev.spans[i];
           const line = details.createDiv({ cls: "contexts-span-line" });
           line.createDiv({ text: fmtClock(span.start), cls: "contexts-span-time" });
-          line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
           if (span.edit) {
-            const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
-            for (const part of fmtDeltaVerbose(span.edit).split("\n")) deltaEl.createDiv({ text: part });
+            line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
+            this.renderDelta(line.createDiv({ cls: "contexts-span-delta" }), span.edit, path);
+            i++;
           } else {
-            line.createDiv({ text: "read", cls: "contexts-span-read" });
+            // Consecutive read-only visits collapse to one line; they're context, not content.
+            let j = i;
+            let readDur = 0;
+            while (j < ev.spans.length && !ev.spans[j].edit) readDur += ev.spans[j++].dur;
+            line.createDiv({ text: fmtDur(readDur), cls: "contexts-span-time" });
+            line.createDiv({ text: j - i > 1 ? `read ×${j - i}` : "read", cls: "contexts-span-read" });
+            i = j;
           }
         }
         details.hidden = true;
@@ -108,6 +116,29 @@ export class ContextsPane extends ItemView {
           : "renamed";
         row.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-trail-delta" });
       }
+    }
+  }
+
+  /** A visit's changes: link names render as clickable links to their files; everything else as text. */
+  private renderDelta(el: HTMLElement, edit: EditDelta, sourcePath: string): void {
+    const linkLine = (label: string, targets?: string[]) => {
+      if (!targets?.length) return;
+      const div = el.createDiv();
+      div.createSpan({ text: `${label}: ` });
+      targets.forEach((target, idx) => {
+        if (idx) div.createSpan({ text: ", " });
+        const link = div.createSpan({ text: target, cls: "contexts-link" });
+        link.addEventListener("click", (evt) => {
+          evt.stopPropagation(); // don't collapse the row
+          const dest = this.app.metadataCache.getFirstLinkpathDest(target, sourcePath);
+          if (dest) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(dest);
+        });
+      });
+    };
+    for (const part of fmtDeltaVerbose(edit).split("\n")) {
+      if (part.startsWith("links added:")) linkLine("links added", edit.linksAdded);
+      else if (part.startsWith("links removed:")) linkLine("links removed", edit.linksRemoved);
+      else el.createDiv({ text: part });
     }
   }
 

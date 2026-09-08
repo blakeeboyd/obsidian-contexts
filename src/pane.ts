@@ -230,6 +230,7 @@ export class ContextsPane extends ItemView {
             line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
             const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
             this.arrivalLine(deltaEl, span, cameFrom.get(span));
+            if (span.section) deltaEl.createDiv({ text: `§ ${span.section}`, cls: "contexts-via" });
             this.renderDelta(deltaEl, span.edit, path);
             this.leftLine(deltaEl, span.left);
             i++;
@@ -247,6 +248,13 @@ export class ContextsPane extends ItemView {
             const chronoFirst = s.trailDetailNewestFirst ? visits[j - 1] : span;
             const chronoLast = s.trailDetailNewestFirst ? span : visits[j - 1];
             this.arrivalLine(readEl, chronoFirst, cameFrom.get(chronoFirst));
+            const secs = [...new Set(visits.slice(i, j).map((v) => v.section).filter((x): x is string => !!x))];
+            if (secs.length) {
+              readEl.createDiv({
+                text: `§ ${secs.slice(0, 3).join(", ")}${secs.length > 3 ? ` +${secs.length - 3}` : ""}`,
+                cls: "contexts-via",
+              });
+            }
             this.leftLine(readEl, chronoLast.left);
             i = j;
           }
@@ -470,6 +478,8 @@ export class ContextsPane extends ItemView {
     if (e.tasksCompleted) chip("check", `${e.tasksCompleted.length}`, "tasks completed");
     if (e.tasksReopened) chip("undo-2", `${e.tasksReopened.length}`, "tasks reopened");
     if (e.urlsAdded || e.urlsRemoved) chip("globe", pm(e.urlsAdded, e.urlsRemoved), "external links");
+    if (e.embedsAdded || e.embedsRemoved) chip("layers", pm(e.embedsAdded, e.embedsRemoved), "embeds");
+    if (e.blockIdsAdded || e.blockIdsRemoved) chip("anchor", pm(e.blockIdsAdded, e.blockIdsRemoved), "block IDs");
     if (e.bold) chip("bold", num(e.bold), "bold");
     if (e.italic) chip("italic", num(e.italic), "italic");
     if (e.fmChanged) {
@@ -530,7 +540,8 @@ export class ContextsPane extends ItemView {
       const link = div.createSpan({ text: target, cls: "contexts-link" });
       link.addEventListener("click", (evt) => {
         evt.stopPropagation(); // don't collapse the row
-        const dest = this.app.metadataCache.getFirstLinkpathDest(target, sourcePath);
+        // Targets may carry a #subpath; resolve on the file part.
+        const dest = this.app.metadataCache.getFirstLinkpathDest(target.split("#")[0], sourcePath);
         if (dest) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(dest);
       });
     });
@@ -570,6 +581,9 @@ export class ContextsPane extends ItemView {
       else if (part.startsWith("external links added:")) this.urlLine(el, "external links added", edit.urlsAdded ?? []);
       else if (part.startsWith("external links removed:"))
         this.urlLine(el, "external links removed", edit.urlsRemoved ?? []);
+      else if (part.startsWith("embeds added:")) this.linkLine(el, "embeds added", edit.embedsAdded ?? [], sourcePath);
+      else if (part.startsWith("embeds removed:"))
+        this.linkLine(el, "embeds removed", edit.embedsRemoved ?? [], sourcePath);
       else el.createDiv({ text: part });
     }
   }

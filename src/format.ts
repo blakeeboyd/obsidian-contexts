@@ -64,6 +64,10 @@ export function fmtDelta(e: EditDelta): string {
   if (e.tasksCompleted) parts.push(`done ${e.tasksCompleted.length}`);
   if (e.tasksReopened) parts.push(`reopened ${e.tasksReopened.length}`);
   if (e.urlsAdded || e.urlsRemoved) parts.push(`urls +${e.urlsAdded?.length ?? 0}/-${e.urlsRemoved?.length ?? 0}`);
+  if (e.embedsAdded || e.embedsRemoved)
+    parts.push(`embeds +${e.embedsAdded?.length ?? 0}/-${e.embedsRemoved?.length ?? 0}`);
+  if (e.blockIdsAdded || e.blockIdsRemoved)
+    parts.push(`ids +${e.blockIdsAdded?.length ?? 0}/-${e.blockIdsRemoved?.length ?? 0}`);
   if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
   if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
   if (e.fmChanged) {
@@ -95,6 +99,10 @@ export function fmtDeltaVerbose(e: EditDelta): string {
   if (e.tasksRemoved?.length) lines.push(`tasks removed: ${e.tasksRemoved.join(", ")}`);
   if (e.urlsAdded?.length) lines.push(`external links added: ${e.urlsAdded.join(", ")}`);
   if (e.urlsRemoved?.length) lines.push(`external links removed: ${e.urlsRemoved.join(", ")}`);
+  if (e.embedsAdded?.length) lines.push(`embeds added: ${e.embedsAdded.join(", ")}`);
+  if (e.embedsRemoved?.length) lines.push(`embeds removed: ${e.embedsRemoved.join(", ")}`);
+  if (e.blockIdsAdded?.length) lines.push(`block ids added: ${e.blockIdsAdded.join(", ")}`);
+  if (e.blockIdsRemoved?.length) lines.push(`block ids removed: ${e.blockIdsRemoved.join(", ")}`);
   if (e.bold) lines.push(`bold ${num(e.bold)}`);
   if (e.italic) lines.push(`italic ${num(e.italic)}`);
   if (e.fmChanged) {

@@ -11,6 +11,8 @@
 export interface Snapshot {
   words: number;
   links: string[];
+  embeds: string[];
+  blockIds: string[];
   tags: string[];
   headings: string[];
   highlights: string[];
@@ -46,6 +48,10 @@ export interface EditDelta {
   tasksRemoved?: string[];
   urlsAdded?: string[];
   urlsRemoved?: string[];
+  embedsAdded?: string[];
+  embedsRemoved?: string[];
+  blockIdsAdded?: string[];
+  blockIdsRemoved?: string[];
   bold?: number; // net count change
   italic?: number;
   /** Frontmatter changes: key → [before, after] (null = absent). Pre-2026-09-08 logs hold a bare key list. */
@@ -71,13 +77,46 @@ export function stripCodeFences(content: string): string {
   return content.replace(/^[ \t]*(?:```|~~~).*\n[\s\S]*?^[ \t]*(?:```|~~~).*$/gm, "");
 }
 
-/** Wikilink and embed targets: [[Target]], [[Target#h|alias]], ![[Target]]. ponytail: markdown-style [text](file.md) links are not parsed; this vault's convention is wikilinks. */
-export function extractLinks(content: string): string[] {
-  const out: string[] = [];
-  for (const m of content.matchAll(/\[\[([^\][|#\n]+)(?:#[^\][|\n]*)?(?:\|[^\][\n]*)?\]\]/g)) {
-    const target = m[1].trim();
-    if (target) out.push(target);
+/**
+ * Wikilink references at full precision: subpaths kept ([[Note#Heading]],
+ * [[Note#^block]] — WHICH part was cited), embeds separated from links
+ * (transclusion is incorporation, not mention). ponytail: markdown-style
+ * [text](file.md) links are not parsed; this vault's convention is wikilinks.
+ */
+export function extractRefs(content: string): { links: string[]; embeds: string[] } {
+  const links: string[] = [];
+  const embeds: string[] = [];
+  for (const m of content.matchAll(/(!)?\[\[([^\][|\n]+?)(?:\|[^\][\n]*)?\]\]/g)) {
+    const target = m[2].trim();
+    if (target) (m[1] ? embeds : links).push(target);
   }
+  return { links, embeds };
+}
+
+/** Kept for callers that want every referenced target regardless of kind. */
+export function extractLinks(content: string): string[] {
+  const { links, embeds } = extractRefs(content);
+  return [...links, ...embeds];
+}
+
+/**
+ * The heading section containing a given line — section-grain attention.
+ * ponytail: cursor-at-close is a proxy for where attention lived; per-span
+ * section sampling with dwell times is the upgrade path.
+ */
+export function sectionAtLine(content: string, line: number): string | undefined {
+  const lines = content.split("\n");
+  for (let i = Math.min(line, lines.length - 1); i >= 0; i--) {
+    const m = lines[i].match(/^#{1,6}[ \t]+(.+?)[ \t]*$/);
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+/** Block IDs (^id ending a line): the moment a passage becomes citable. */
+export function extractBlockIds(content: string): string[] {
+  const out: string[] = [];
+  for (const m of content.matchAll(/(?:^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/gm)) out.push(`^${m[1]}`);
   return out;
 }
 
@@ -164,6 +203,8 @@ export interface SpanEvent {
   via?: OpenMethod;
   /** How the visit ended. "switch" = went to another file; "close" = tab closed; "blur" = left the app; plus idle/quit/pause. */
   left?: LeaveReason;
+  /** Heading section the cursor was in when the visit ended — section-grain attention. */
+  section?: string;
   edit?: EditDelta;
 }
 
@@ -331,6 +372,12 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   const [urlsAdded, urlsRemoved] = diffList(before.urls, after.urls);
   if (urlsAdded.length) delta.urlsAdded = urlsAdded;
   if (urlsRemoved.length) delta.urlsRemoved = urlsRemoved;
+  const [embedsAdded, embedsRemoved] = diffList(before.embeds, after.embeds);
+  if (embedsAdded.length) delta.embedsAdded = embedsAdded;
+  if (embedsRemoved.length) delta.embedsRemoved = embedsRemoved;
+  const [idsAdded, idsRemoved] = diffList(before.blockIds, after.blockIds);
+  if (idsAdded.length) delta.blockIdsAdded = idsAdded;
+  if (idsRemoved.length) delta.blockIdsRemoved = idsRemoved;
   if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
   if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
   const fmChanged: Record<string, [string | null, string | null]> = {};
@@ -362,7 +409,7 @@ export class Recorder {
    * Returns the event to log, or null if nothing was open or the span was
    * too short to count.
    */
-  deactivate(after: Snapshot | null, end: number, left?: LeaveReason): SpanEvent | null {
+  deactivate(after: Snapshot | null, end: number, left?: LeaveReason, section?: string): SpanEvent | null {
     const cur = this.current;
     this.current = null;
     if (!cur) return null;
@@ -378,6 +425,7 @@ export class Recorder {
       if (cur.opened.from !== undefined) ev.from = cur.opened.from;
     }
     if (left) ev.left = left;
+    if (section) ev.section = section;
     if (edit) ev.edit = edit;
     return ev;
   }

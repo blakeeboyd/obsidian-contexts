@@ -14,12 +14,14 @@ import {
   extractFootnotes,
   extractFormatting,
   extractHeadings,
+  extractBlockIds,
   extractHighlights,
-  extractLinks,
+  extractRefs,
   extractTags,
   extractTasks,
   extractUrls,
   firstSeenCounts,
+  sectionAtLine,
   fmTagList,
   isSpan,
   stripCodeFences,
@@ -378,7 +380,7 @@ export default class ContextsPlugin extends Plugin {
           path: file.path,
           ctime: file.stat.ctime,
           counts: firstSeenCounts(snap),
-          links: [...new Set(snap.links)],
+          links: [...new Set([...snap.links, ...snap.embeds])],
           tags: snap.tags,
         });
       }
@@ -408,9 +410,21 @@ export default class ContextsPlugin extends Plugin {
     if (left === "switch" && !this.isOpenAnywhere(path)) left = "close";
     const file = this.app.vault.getAbstractFileByPath(path);
     const after = file instanceof TFile ? await this.snapshot(file, true) : null;
-    const ev = this.recorder.deactivate(after, end ?? Date.now(), left);
+    const section = file instanceof TFile && this.settings.capture.section ? this.activeSection(file) : undefined;
+    const ev = this.recorder.deactivate(after, end ?? Date.now(), left, section);
     this.recentDeact.set(path, Date.now());
     if (ev) await this.record(ev);
+  }
+
+  /** The heading section holding the cursor in the file's open editor, if any. */
+  private activeSection(file: TFile): string | undefined {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view instanceof MarkdownView && view.file?.path === file.path) {
+        return sectionAtLine(view.editor.getValue(), view.editor.getCursor().line);
+      }
+    }
+    return undefined;
   }
 
   private isOpenAnywhere(path: string): boolean {
@@ -458,9 +472,12 @@ export default class ContextsPlugin extends Plugin {
     if (c.frontmatter) {
       for (const [k, v] of Object.entries(fmRaw)) fm[k] = JSON.stringify(v) ?? "";
     }
+    const refs = c.links ? extractRefs(body) : { links: [], embeds: [] };
     return {
       words: c.words ? content.split(/\s+/).filter(Boolean).length : 0,
-      links: c.links ? extractLinks(body) : [],
+      links: refs.links,
+      embeds: refs.embeds,
+      blockIds: c.blockIds ? extractBlockIds(content) : [],
       tags: c.tags ? extractTags(body, fmTagList(fmRaw)) : [],
       headings: c.headings ? extractHeadings(body) : [],
       highlights: c.highlights ? extractHighlights(content) : [],

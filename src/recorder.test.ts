@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   Recorder,
+  extractBlockIds,
+  extractRefs,
+  sectionAtLine,
   Snapshot,
   diffSnapshots,
   extractFootnotes,
@@ -19,6 +22,8 @@ function snap(partial: Partial<Snapshot> = {}): Snapshot {
   return {
     words: 0,
     links: [],
+    embeds: [],
+    blockIds: [],
     tags: [],
     headings: [],
     highlights: [],
@@ -43,9 +48,25 @@ describe("extractors", () => {
     expect(extractFootnotes(text)).toEqual(["the source", "quick aside"]);
   });
 
-  it("finds wikilink targets, dropping aliases, subpaths, and the embed bang", () => {
-    const text = "See [[&Jason Fick|Jason]] and [[Note#Heading]] plus ![[image.png]].";
-    expect(extractLinks(text)).toEqual(["&Jason Fick", "Note", "image.png"]);
+  it("keeps subpaths, drops aliases, and separates embeds from links", () => {
+    const text = "See [[&Jason Fick|Jason]] and [[Note#Heading]] plus ![[image.png]] and [[Zettel#^quote1]].";
+    expect(extractRefs(text)).toEqual({
+      links: ["&Jason Fick", "Note#Heading", "Zettel#^quote1"],
+      embeds: ["image.png"],
+    });
+    expect(extractLinks(text)).toEqual(["&Jason Fick", "Note#Heading", "Zettel#^quote1", "image.png"]);
+  });
+
+  it("finds block IDs at line ends", () => {
+    const text = "A quoted passage. ^quote-1\n\nplain line\n^lonely\nnot ^mid line";
+    expect(extractBlockIds(text)).toEqual(["^quote-1", "^lonely"]);
+  });
+
+  it("finds the heading section containing a line", () => {
+    const text = "intro\n# One\nbody\n## Two\ndeep";
+    expect(sectionAtLine(text, 4)).toBe("Two");
+    expect(sectionAtLine(text, 2)).toBe("One");
+    expect(sectionAtLine(text, 0)).toBeUndefined();
   });
 
   it("finds inline tags and merges frontmatter tags", () => {
@@ -160,6 +181,12 @@ describe("Recorder open provenance", () => {
     r.activate("B.md", snap(), 0, undefined, { via: "link", from: "A.md" });
     const ev = r.deactivate(snap(), 1000);
     expect(ev?.from).toBe("A.md");
+  });
+
+  it("records the section the visit ended in", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0);
+    expect(r.deactivate(snap(), 5000, "switch", "Chapter Survey")?.section).toBe("Chapter Survey");
   });
 
   it("records how the visit ended", () => {

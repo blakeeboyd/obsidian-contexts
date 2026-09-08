@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
-import { Stint, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, mergeDeltas, relatedTo, trailFor } from "./views";
+import {
+  Stint,
+  applyRenames,
+  coalesceTrail,
+  groupSessions,
+  healRenames,
+  isStint,
+  mergeDeltas,
+  pairKey,
+  relatedTo,
+  trailFor,
+  unrelatedPairs,
+} from "./views";
 
 const MIN = 60_000;
 
@@ -224,6 +236,39 @@ describe("mergeDeltas", () => {
   it("shows word movement in both directions even when the net is zero", () => {
     expect(mergeDeltas([{ words: 5 }, { words: -5 }])).toEqual({ wordsAdded: 5, wordsRemoved: 5 });
     expect(mergeDeltas([])).toBeUndefined();
+  });
+});
+
+describe("relatedness feedback", () => {
+  it("keeps the latest unrelate/relate verdict per pair", () => {
+    const events: LogEvent[] = [
+      { t: 1, type: "unrelate", a: "A.md", b: "B.md" },
+      { t: 2, type: "unrelate", a: "A.md", b: "C.md" },
+      { t: 3, type: "relate", a: "A.md", b: "B.md" },
+    ];
+    const set = unrelatedPairs(events);
+    expect(set.has(pairKey("A.md", "C.md"))).toBe(true);
+    expect(set.has(pairKey("B.md", "A.md"))).toBe(false);
+  });
+
+  it("demotes a dismissed pair far below an undismissed one", () => {
+    const events = [span("Me.md", 0), span("Buddy.md", 6 * MIN), span("Noise.md", 12 * MIN)];
+    const dismissed = new Set([pairKey("Me.md", "Noise.md")]);
+    const related = relatedTo("Me.md", groupSessions(events), 20 * MIN, undefined, dismissed);
+    expect(related[0].path).toBe("Buddy.md");
+    expect(related[1].path).toBe("Noise.md");
+    expect(related[1].dismissed).toBe(true);
+    expect(related[1].score).toBeLessThan(related[0].score * 0.1);
+  });
+
+  it("follows renames on both sides of the pair", () => {
+    const events: LogEvent[] = [
+      { t: 1, type: "unrelate", a: "A.md", b: "B.md" },
+      { t: 2, type: "rename", from: "A.md", to: "A2.md" },
+      { t: 3, type: "rename", from: "B.md", to: "B2.md" },
+    ];
+    const set = unrelatedPairs(applyRenames(events));
+    expect(set.has(pairKey("A2.md", "B2.md"))).toBe(true);
   });
 });
 

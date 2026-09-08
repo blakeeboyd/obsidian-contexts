@@ -220,7 +220,34 @@ export interface FirstSeenEvent {
   tags?: string[];
 }
 
-export type LogEvent = SpanEvent | RenameEvent | DeleteEvent | CreateEvent | ExtModEvent | FirstSeenEvent;
+/**
+ * The user judged two files unrelated despite their co-activation: direct
+ * feedback, itself part of the behavioral record. Scoring demotes the pair
+ * to near zero but tracking never stops. A later RelateEvent undoes it.
+ */
+export interface UnrelateEvent {
+  t: number;
+  type: "unrelate";
+  a: string;
+  b: string;
+}
+
+export interface RelateEvent {
+  t: number;
+  type: "relate";
+  a: string;
+  b: string;
+}
+
+export type LogEvent =
+  | SpanEvent
+  | RenameEvent
+  | DeleteEvent
+  | CreateEvent
+  | ExtModEvent
+  | FirstSeenEvent
+  | UnrelateEvent
+  | RelateEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

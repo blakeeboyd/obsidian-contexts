@@ -153,3 +153,29 @@
   color: var(--text-faint);
   font-style: italic;
 }
+
+.contexts-row {
+  position: relative;
+}
+
+.contexts-row-action {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.contexts-row-action svg {
+  width: 12px;
+  height: 12px;
+}
+
+.contexts-row:hover .contexts-row-action {
+  display: flex;
+}
+
+.contexts-row-action:hover {
+  color: var(--text-normal);
+}

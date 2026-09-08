@@ -2,7 +2,19 @@ import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian"
 import type { EditDelta } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
-import { Session, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
+import {
+  PAIR_SEP,
+  Session,
+  applyRenames,
+  coalesceTrail,
+  groupSessions,
+  healRenames,
+  isStint,
+  pairKey,
+  relatedTo,
+  trailFor,
+  unrelatedPairs,
+} from "./views";
 
 export const CONTEXTS_VIEW_TYPE = "contexts-pane";
 
@@ -60,7 +72,8 @@ export class ContextsPane extends ItemView {
     // Related now: the co-activation ranking for this file.
     contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
     const halfLife = s.halfLifeDays * 24 * 3600_000;
-    const related = relatedTo(path, sessions, Date.now(), halfLife).slice(0, RELATED_LIMIT);
+    const dismissed = unrelatedPairs(events);
+    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed).slice(0, RELATED_LIMIT);
     if (!related.length) {
       contentEl.createDiv({
         text: `Nothing yet. ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded; companionship accumulates as you work.`,
@@ -68,8 +81,15 @@ export class ContextsPane extends ItemView {
       });
     }
     for (const r of related) {
-      this.fileRow(contentEl, r.path, `${r.sharedSessions} shared · ${relTime(r.lastAt)}`);
+      this.fileRow(contentEl, r.path, `${r.sharedSessions} shared · ${relTime(r.lastAt)}`, {
+        icon: r.dismissed ? "rotate-ccw" : "x",
+        tooltip: r.dismissed
+          ? "Marked unrelated — click to restore the connection"
+          : "Not related: keep tracking, but weight this connection near zero",
+        onClick: () => this.plugin.markRelated(path, r.path, !!r.dismissed),
+      });
     }
+    this.renderDismissed(contentEl, path, dismissed, related);
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
@@ -78,6 +98,8 @@ export class ContextsPane extends ItemView {
       contentEl.createDiv({ text: "No history yet for this file.", cls: "contexts-empty" });
     }
     for (const ev of trail) {
+      // Relatedness feedback is pair-scoped, not part of any single file's trail.
+      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate")) continue;
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
@@ -154,7 +176,45 @@ export class ContextsPane extends ItemView {
    * right-aligned meta. Hover shows Obsidian's page preview; right-click
    * opens the native file menu.
    */
-  private fileRow(container: HTMLElement, path: string, meta: string): void {
+  /**
+   * Dismissed pairs not visible in the ranking (demotion usually pushes them
+   * out of the top rows) still need a restore path: a quiet expandable list.
+   */
+  private renderDismissed(
+    contentEl: HTMLElement,
+    path: string,
+    dismissed: Set<string>,
+    shown: { path: string }[]
+  ): void {
+    const visible = new Set(shown.map((r) => r.path));
+    const partners = [...dismissed]
+      .map((k) => k.split(PAIR_SEP))
+      .filter((pair) => pair.includes(path))
+      .map((pair) => (pair[0] === path ? pair[1] : pair[0]))
+      .filter((other) => !visible.has(other));
+    if (!partners.length) return;
+    const toggle = contentEl.createDiv({
+      text: `${partners.length} marked unrelated`,
+      cls: "contexts-empty contexts-expandable",
+    });
+    const list = contentEl.createDiv();
+    list.hidden = true;
+    toggle.addEventListener("click", () => (list.hidden = !list.hidden));
+    for (const other of partners) {
+      this.fileRow(list, other, "unrelated", {
+        icon: "rotate-ccw",
+        tooltip: "Restore the connection",
+        onClick: () => this.plugin.markRelated(path, other, true),
+      });
+    }
+  }
+
+  private fileRow(
+    container: HTMLElement,
+    path: string,
+    meta: string,
+    action?: { icon: string; tooltip: string; onClick: () => void }
+  ): void {
     const row = container.createDiv({ cls: "contexts-row" });
     row.createDiv({ text: path.split("/").pop()?.replace(/\.md$/, "") ?? path, cls: "contexts-row-title" });
     const metaLine = row.createDiv({ cls: "contexts-row-meta contexts-row-metaline" });
@@ -166,6 +226,16 @@ export class ContextsPane extends ItemView {
       : `${segs[0]}/…/${segs[segs.length - 1]}/`;
     metaLine.createSpan({ text: folder, cls: "contexts-row-folder" });
     if (meta) metaLine.createSpan({ text: meta, cls: "contexts-row-when" });
+    if (action) {
+      const btn = row.createDiv({ cls: "contexts-row-action" });
+      setIcon(btn, action.icon);
+      btn.setAttribute("title", action.tooltip);
+      btn.setAttribute("aria-label", action.tooltip);
+      btn.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        action.onClick();
+      });
+    }
     row.setAttribute("aria-label", path);
     row.addEventListener("click", (evt) => this.openPath(path, evt));
     row.addEventListener("mouseover", (evt) => {

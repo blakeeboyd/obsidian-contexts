@@ -110,6 +110,8 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "delete" ? `deleted: ${ev.path}`
       : ev.type === "create" ? `created: ${ev.path}`
       : ev.type === "firstseen" ? `first seen: ${ev.path} (${ev.counts.words}w, ${ev.counts.links} links)`
+      : ev.type === "unrelate" ? `marked unrelated: ${ev.a} ✗ ${ev.b}`
+      : ev.type === "relate" ? `relation restored: ${ev.a} + ${ev.b}`
       : `external edit: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

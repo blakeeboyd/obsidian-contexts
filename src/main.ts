@@ -157,6 +157,12 @@ export default class ContextsPlugin extends Plugin {
     });
   }
 
+  /** User feedback on a pair: related=false demotes it in scoring (never deletes); true restores. */
+  markRelated(a: string, b: string, related: boolean): void {
+    const [x, y] = a < b ? [a, b] : [b, a];
+    this.enqueue(() => this.record({ t: Date.now(), type: related ? "relate" : "unrelate", a: x, b: y }));
+  }
+
   /** Pause closes the open span immediately; resume reopens one for the current file. */
   setPaused(v: boolean): void {
     if (this.settings.paused === v) return;

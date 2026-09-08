@@ -27,6 +27,8 @@ const RECENT_DEACT_GRACE_MS = 3000;
 // One extmod per path per window; AI and sync writes arrive in bursts.
 const EXTMOD_COALESCE_MS = 15_000;
 const IDLE_CHECK_MS = 60_000;
+// A link click older than this can't explain the current activation.
+const LINK_OPEN_WINDOW_MS = 3000;
 
 export default class ContextsPlugin extends Plugin {
   settings: ContextsSettings = DEFAULT_SETTINGS;
@@ -42,6 +44,8 @@ export default class ContextsPlugin extends Plugin {
   private lastExtmod = new Map<string, number>();
   // In-memory copy of the log so views never wait on file IO after first load.
   private events: LogEvent[] | null = null;
+  // Set when a link click routed through openLinkText; consumed by the next activation.
+  private pendingLinkFrom: { from: string; t: number } | null = null;
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -51,7 +55,8 @@ export default class ContextsPlugin extends Plugin {
     this.log = new EventLog(this.app.vault.adapter, `${this.manifest.dir}/log`, getDeviceId());
 
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
-    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
+    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: false });
+    this.patchOpenLinkText();
     this.addRibbonIcon("footprints", "Open Contexts pane", () => void this.activatePane());
     this.addCommand({
       id: "open-pane",
@@ -137,6 +142,28 @@ export default class ContextsPlugin extends Plugin {
     this.settings.paused = v;
     this.enqueue(() => (v ? this.closeSpan() : this.onActiveChange()));
     void this.saveSettings();
+  }
+
+  /**
+   * Link clicks (editor, preview, backlinks pane) route through
+   * Workspace.openLinkText with the source file's path. Intercepting it is
+   * how a span learns it was opened by FOLLOWING a link — an interaction the
+   * static link graph can't see. ponytail: quick switcher, file explorer,
+   * and commands aren't distinguished; absence of `from` covers them all.
+   */
+  private patchOpenLinkText(): void {
+    const plugin = this;
+    const proto = Object.getPrototypeOf(this.app.workspace) as {
+      openLinkText: (this: unknown, linktext: string, sourcePath: string, ...rest: unknown[]) => unknown;
+    };
+    const orig = proto.openLinkText;
+    proto.openLinkText = function (linktext: string, sourcePath: string, ...rest: unknown[]) {
+      if (sourcePath) plugin.pendingLinkFrom = { from: sourcePath, t: Date.now() };
+      return orig.call(this, linktext, sourcePath, ...rest);
+    };
+    this.register(() => {
+      proto.openLinkText = orig;
+    });
   }
 
   /** Any event already mentions this path (under this name). ponytail: linear scan; index if the log grows large. */
@@ -246,10 +273,18 @@ export default class ContextsPlugin extends Plugin {
           path: file.path,
           ctime: file.stat.ctime,
           counts: firstSeenCounts(snap),
+          links: [...new Set(snap.links)],
+          tags: snap.tags,
         });
       }
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
-      this.recorder.activate(file.path, snap, Date.now(), ctime);
+      const pending = this.pendingLinkFrom;
+      this.pendingLinkFrom = null;
+      const from =
+        pending && Date.now() - pending.t < LINK_OPEN_WINDOW_MS && pending.from !== file.path
+          ? pending.from
+          : undefined;
+      this.recorder.activate(file.path, snap, Date.now(), ctime, from);
     }
     this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
   }

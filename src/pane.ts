@@ -43,10 +43,12 @@ export class ContextsPane extends ItemView {
     const events = applyRenames(healRenames(await this.plugin.getEvents()));
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
 
-    // Sticky path only counts while a note is actually open somewhere;
-    // close all notes and the pane falls back to the sessions view.
+    // Sticky path only counts while a note is actually open somewhere AND
+    // the main area isn't showing an empty "New tab" — close everything (or
+    // open a fresh tab) and the pane falls back to the sessions view.
     const anyNoteOpen = this.app.workspace.getLeavesOfType("markdown").length > 0;
-    const path = anyNoteOpen ? this.plugin.lastActiveMdPath : null;
+    const mainIsEmpty = this.app.workspace.getMostRecentLeaf()?.view.getViewType() === "empty";
+    const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderSessions(contentEl, sessions);
       return;
@@ -94,7 +96,9 @@ export class ContextsPane extends ItemView {
           line.createDiv({ text: fmtClock(span.start), cls: "contexts-span-time" });
           if (span.edit) {
             line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
-            this.renderDelta(line.createDiv({ cls: "contexts-span-delta" }), span.edit, path);
+            const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
+            if (span.from) this.viaLine(deltaEl, span.from);
+            this.renderDelta(deltaEl, span.edit, path);
             i++;
           } else {
             // Consecutive read-only visits collapse to one line; they're context, not content.
@@ -102,7 +106,9 @@ export class ContextsPane extends ItemView {
             let readDur = 0;
             while (j < visits.length && !visits[j].edit) readDur += visits[j++].dur;
             line.createDiv({ text: fmtDur(readDur), cls: "contexts-span-time" });
-            line.createDiv({ text: j - i > 1 ? `read ×${j - i}` : "read", cls: "contexts-span-read" });
+            const readEl = line.createDiv({ cls: "contexts-span-read" });
+            readEl.createSpan({ text: j - i > 1 ? `read ×${j - i}` : "read" });
+            if (span.from) this.viaLine(readEl, span.from);
             i = j;
           }
         }
@@ -129,8 +135,10 @@ export class ContextsPane extends ItemView {
           const c = ev.counts;
           if (ev.ctime) details.createDiv({ text: `created ${fmtTime(ev.ctime)}` });
           details.createDiv({
-            text: `already had: ${c.words} words · ${c.links} links · ${c.tags} tags · ${c.headings} headings · ${c.highlights} highlights · ${c.footnotes} footnotes · ${c.tasksOpen + c.tasksDone} tasks`,
+            text: `already had: ${c.words} words · ${c.headings} headings · ${c.highlights} highlights · ${c.footnotes} footnotes · ${c.tasksOpen + c.tasksDone} tasks`,
           });
+          if (ev.links?.length) this.linkLine(details, `links (${ev.links.length})`, ev.links, ev.path);
+          if (ev.tags?.length) details.createDiv({ text: `tags: ${ev.tags.join(", ")}` });
         }
         details.hidden = true;
         row.addClass("contexts-expandable");
@@ -234,25 +242,40 @@ export class ContextsPane extends ItemView {
     }
   }
 
+  /** "via link from X": this visit began by clicking a link in X. The name opens that file. */
+  private viaLine(el: HTMLElement, fromPath: string): void {
+    const div = el.createDiv({ cls: "contexts-via" });
+    div.createSpan({ text: "via link from " });
+    const name = fromPath.split("/").pop()?.replace(/\.md$/, "") ?? fromPath;
+    const link = div.createSpan({ text: name, cls: "contexts-link" });
+    link.setAttribute("title", fromPath);
+    link.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.openPath(fromPath, evt);
+    });
+  }
+
+  /** A line of clickable link names: "label: A, B, C" where each name opens its file. */
+  private linkLine(el: HTMLElement, label: string, targets: string[], sourcePath: string): void {
+    if (!targets.length) return;
+    const div = el.createDiv();
+    div.createSpan({ text: `${label}: ` });
+    targets.forEach((target, idx) => {
+      if (idx) div.createSpan({ text: ", " });
+      const link = div.createSpan({ text: target, cls: "contexts-link" });
+      link.addEventListener("click", (evt) => {
+        evt.stopPropagation(); // don't collapse the row
+        const dest = this.app.metadataCache.getFirstLinkpathDest(target, sourcePath);
+        if (dest) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(dest);
+      });
+    });
+  }
+
   /** A visit's changes: link names render as clickable links to their files; everything else as text. */
   private renderDelta(el: HTMLElement, edit: EditDelta, sourcePath: string): void {
-    const linkLine = (label: string, targets?: string[]) => {
-      if (!targets?.length) return;
-      const div = el.createDiv();
-      div.createSpan({ text: `${label}: ` });
-      targets.forEach((target, idx) => {
-        if (idx) div.createSpan({ text: ", " });
-        const link = div.createSpan({ text: target, cls: "contexts-link" });
-        link.addEventListener("click", (evt) => {
-          evt.stopPropagation(); // don't collapse the row
-          const dest = this.app.metadataCache.getFirstLinkpathDest(target, sourcePath);
-          if (dest) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(dest);
-        });
-      });
-    };
     for (const part of fmtDeltaVerbose(edit).split("\n")) {
-      if (part.startsWith("links added:")) linkLine("links added", edit.linksAdded);
-      else if (part.startsWith("links removed:")) linkLine("links removed", edit.linksRemoved);
+      if (part.startsWith("links added:")) this.linkLine(el, "links added", edit.linksAdded ?? [], sourcePath);
+      else if (part.startsWith("links removed:")) this.linkLine(el, "links removed", edit.linksRemoved ?? [], sourcePath);
       else el.createDiv({ text: part });
     }
   }

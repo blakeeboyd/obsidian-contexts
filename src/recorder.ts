@@ -144,6 +144,8 @@ export interface SpanEvent {
   start: number;
   dur: number;
   ctime?: number; // file creation time, the identity anchor for healing external renames
+  /** The file this one was opened FROM via a clicked link — the user followed a connection. Absent = opened some other way. */
+  from?: string;
   edit?: EditDelta;
 }
 
@@ -199,6 +201,9 @@ export interface FirstSeenEvent {
     tasksOpen: number;
     tasksDone: number;
   };
+  /** Identifiers, not content: what the file was already connected to when first seen. */
+  links?: string[];
+  tags?: string[];
 }
 
 export type LogEvent = SpanEvent | RenameEvent | DeleteEvent | CreateEvent | ExtModEvent | FirstSeenEvent;
@@ -281,14 +286,14 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
 }
 
 export class Recorder {
-  private current: { path: string; start: number; snap: Snapshot; ctime?: number } | null = null;
+  private current: { path: string; start: number; snap: Snapshot; ctime?: number; from?: string } | null = null;
 
   get activePath(): string | null {
     return this.current?.path ?? null;
   }
 
-  activate(path: string, snap: Snapshot, now: number, ctime?: number): void {
-    this.current = { path, start: now, snap, ctime };
+  activate(path: string, snap: Snapshot, now: number, ctime?: number, from?: string): void {
+    this.current = { path, start: now, snap, ctime, from };
   }
 
   /**
@@ -308,6 +313,7 @@ export class Recorder {
     if (dur < MIN_SPAN_MS && !edit) return null;
     const ev: SpanEvent = { t: end, path: cur.path, start: cur.start, dur };
     if (cur.ctime !== undefined) ev.ctime = cur.ctime;
+    if (cur.from !== undefined) ev.from = cur.from;
     if (edit) ev.edit = edit;
     return ev;
   }

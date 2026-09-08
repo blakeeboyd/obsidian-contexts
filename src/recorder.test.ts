@@ -120,6 +120,21 @@ describe("diffSnapshots", () => {
   });
 });
 
+describe("Recorder link provenance", () => {
+  it("stamps the span with the file it was opened from", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0, undefined, "A.md");
+    const ev = r.deactivate(snap(), 5000);
+    expect(ev?.from).toBe("A.md");
+  });
+
+  it("omits from when the file was opened another way", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0);
+    expect(r.deactivate(snap(), 5000)?.from).toBeUndefined();
+  });
+});
+
 describe("Recorder minimum span", () => {
   it("drops a sub-minimum span with no edit", () => {
     const r = new Recorder();

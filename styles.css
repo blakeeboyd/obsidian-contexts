@@ -148,3 +148,8 @@
 .contexts-row-when {
   flex-shrink: 0;
 }
+
+.contexts-via {
+  color: var(--text-faint);
+  font-style: italic;
+}

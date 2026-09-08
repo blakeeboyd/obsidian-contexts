@@ -27,14 +27,17 @@ export interface EditDelta {
   linksRemoved?: string[];
   tagsAdded?: string[];
   tagsRemoved?: string[];
-  headingsChanged?: true;
+  headingsAdded?: string[];
+  headingsRemoved?: string[];
+  headingsChanged?: true; // reorder only (nothing added or removed); also the pre-2026-09-08 log shape
   highlightsAdded?: string[];
   highlightsRemoved?: string[];
   footnotesAdded?: string[];
   footnotesRemoved?: string[];
   bold?: number; // net count change
   italic?: number;
-  fmChanged?: string[]; // frontmatter keys added, removed, or altered
+  /** Frontmatter changes: key → [before, after] (null = absent). Pre-2026-09-08 logs hold a bare key list. */
+  fmChanged?: string[] | Record<string, [string | null, string | null]>;
 }
 
 // Captured highlight/footnote text is truncated so one long annotation can't bloat the log.
@@ -140,7 +143,12 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   const [tagsAdded, tagsRemoved] = diffList(before.tags, after.tags);
   if (tagsAdded.length) delta.tagsAdded = tagsAdded;
   if (tagsRemoved.length) delta.tagsRemoved = tagsRemoved;
-  if (before.headings.join("\n") !== after.headings.join("\n")) delta.headingsChanged = true;
+  const [hAdded, hRemoved] = diffList(before.headings, after.headings);
+  if (hAdded.length) delta.headingsAdded = hAdded.map(clip);
+  if (hRemoved.length) delta.headingsRemoved = hRemoved.map(clip);
+  if (!hAdded.length && !hRemoved.length && before.headings.join("\n") !== after.headings.join("\n")) {
+    delta.headingsChanged = true; // pure reorder
+  }
   const [hlAdded, hlRemoved] = diffList(before.highlights, after.highlights);
   if (hlAdded.length) delta.highlightsAdded = hlAdded;
   if (hlRemoved.length) delta.highlightsRemoved = hlRemoved;
@@ -149,11 +157,13 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
   if (fnRemoved.length) delta.footnotesRemoved = fnRemoved;
   if (after.bold !== before.bold) delta.bold = after.bold - before.bold;
   if (after.italic !== before.italic) delta.italic = after.italic - before.italic;
-  const fmChanged: string[] = [];
-  for (const k of new Set([...Object.keys(before.fm), ...Object.keys(after.fm)])) {
-    if (before.fm[k] !== after.fm[k]) fmChanged.push(k);
+  const fmChanged: Record<string, [string | null, string | null]> = {};
+  for (const k of [...new Set([...Object.keys(before.fm), ...Object.keys(after.fm)])].sort()) {
+    if (before.fm[k] !== after.fm[k]) {
+      fmChanged[k] = [before.fm[k] != null ? clip(before.fm[k]) : null, after.fm[k] != null ? clip(after.fm[k]) : null];
+    }
   }
-  if (fmChanged.length) delta.fmChanged = fmChanged.sort();
+  if (Object.keys(fmChanged).length) delta.fmChanged = fmChanged;
   return Object.keys(delta).length ? delta : undefined;
 }
 

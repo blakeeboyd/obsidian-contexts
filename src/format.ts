@@ -33,14 +33,19 @@ export function fmtDelta(e: EditDelta): string {
     parts.push(`links +${e.linksAdded?.length ?? 0}/-${e.linksRemoved?.length ?? 0}`);
   if (e.tagsAdded || e.tagsRemoved)
     parts.push(`tags +${e.tagsAdded?.length ?? 0}/-${e.tagsRemoved?.length ?? 0}`);
-  if (e.headingsChanged) parts.push("headings");
+  if (e.headingsAdded || e.headingsRemoved)
+    parts.push(`headings +${e.headingsAdded?.length ?? 0}/-${e.headingsRemoved?.length ?? 0}`);
+  else if (e.headingsChanged) parts.push("headings");
   if (e.highlightsAdded || e.highlightsRemoved)
     parts.push(`hl +${e.highlightsAdded?.length ?? 0}/-${e.highlightsRemoved?.length ?? 0}`);
   if (e.footnotesAdded || e.footnotesRemoved)
     parts.push(`fn +${e.footnotesAdded?.length ?? 0}/-${e.footnotesRemoved?.length ?? 0}`);
   if (e.bold) parts.push(`bold ${e.bold > 0 ? "+" : ""}${e.bold}`);
   if (e.italic) parts.push(`italic ${e.italic > 0 ? "+" : ""}${e.italic}`);
-  if (e.fmChanged) parts.push(`fm: ${e.fmChanged.join(",")}`);
+  if (e.fmChanged) {
+    const keys = Array.isArray(e.fmChanged) ? e.fmChanged : Object.keys(e.fmChanged);
+    parts.push(`fm: ${keys.join(",")}`);
+  }
   return parts.join(", ");
 }
 

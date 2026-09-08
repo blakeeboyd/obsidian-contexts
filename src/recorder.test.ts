@@ -44,10 +44,23 @@ describe("diffSnapshots", () => {
     expect(diffSnapshots(snap({ words: 5 }), snap({ words: 5 }))).toBeUndefined();
   });
 
-  it("reports frontmatter key changes without values", () => {
+  it("reports frontmatter changes with before and after values", () => {
     const before = snap({ fm: { status: '"draft"', file_type: '"note"' } });
     const after = snap({ fm: { status: '"done"', file_type: '"note"', domains: '["x"]' } });
-    expect(diffSnapshots(before, after)?.fmChanged).toEqual(["domains", "status"]);
+    expect(diffSnapshots(before, after)?.fmChanged).toEqual({
+      domains: [null, '["x"]'],
+      status: ['"draft"', '"done"'],
+    });
+  });
+
+  it("reports which headings were added or removed", () => {
+    const d = diffSnapshots(snap({ headings: ["Intro", "Old"] }), snap({ headings: ["Intro", "New"] }));
+    expect(d).toEqual({ headingsAdded: ["New"], headingsRemoved: ["Old"] });
+  });
+
+  it("flags a pure heading reorder without add/remove lists", () => {
+    const d = diffSnapshots(snap({ headings: ["A", "B"] }), snap({ headings: ["B", "A"] }));
+    expect(d).toEqual({ headingsChanged: true });
   });
 
   it("reports formatting and word deltas", () => {

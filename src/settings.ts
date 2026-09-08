@@ -47,11 +47,11 @@ const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
   words: ["Word count", "Net words added or removed while a note is active."],
   links: ["Links", "Wikilinks and embeds added or removed."],
   tags: ["Tags", "Tags added or removed, including frontmatter tags."],
-  headings: ["Headings", "Whether a note's outline changed."],
+  headings: ["Headings", "Headings added or removed, with their text."],
   highlights: ["Highlights", "==Highlighted== text added or removed, with the text itself."],
   footnotes: ["Footnotes", "Footnotes added or removed, with their text."],
   formatting: ["Bold and italics", "Net change in bold and italic emphasis counts."],
-  frontmatter: ["Frontmatter fields", "Which frontmatter keys changed (not their values)."],
+  frontmatter: ["Frontmatter fields", "Which frontmatter keys changed, with their before and after values."],
   ctime: ["Creation time", "Stamp each span with the file's creation time, the anchor for healing renames made outside Obsidian."],
   externalEdits: ["Creations and external edits", "Log file creations, and edits made while a file is not active in the editor (AI, sync, scripts)."],
 };

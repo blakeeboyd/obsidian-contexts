@@ -1,4 +1,4 @@
-import { App, MarkdownView, Modal, Plugin, TFile, getAllTags } from "obsidian";
+import { App, MarkdownView, Modal, Notice, Plugin, TFile, getAllTags } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
@@ -12,7 +12,7 @@ import {
   isSpan,
 } from "./recorder";
 import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
-import { applyRenames, groupSessions, relatedTo } from "./views";
+import { applyRenames, groupSessions, healRenames, relatedTo } from "./views";
 
 // A modify event on a path this soon after its span closed is the editor's
 // trailing autosave, not an external edit.
@@ -72,7 +72,7 @@ export default class ContextsPlugin extends Plugin {
       // Registered after layout-ready so the vault-load flood of create events is not logged.
       this.registerEvent(
         this.app.vault.on("create", (file) => {
-          if (file instanceof TFile && file.extension === "md" && this.settings.capture.externalEdits) {
+          if (file instanceof TFile && file.extension === "md" && this.settings.capture.externalEdits && this.tracked(file.path)) {
             this.enqueue(() => this.record({ t: Date.now(), type: "create", path: file.path }));
           }
         })
@@ -89,7 +89,9 @@ export default class ContextsPlugin extends Plugin {
         if (file instanceof TFile && file.extension === "md") {
           this.recorder.handleRename(oldPath, file.path);
           if (this.lastActiveMdPath === oldPath) this.lastActiveMdPath = file.path;
-          this.enqueue(() => this.record({ t: Date.now(), type: "rename", from: oldPath, to: file.path }));
+          if (this.tracked(file.path)) {
+            this.enqueue(() => this.record({ t: Date.now(), type: "rename", from: oldPath, to: file.path }));
+          }
         }
       })
     );
@@ -98,7 +100,9 @@ export default class ContextsPlugin extends Plugin {
       this.app.vault.on("delete", (file) => {
         if (file instanceof TFile && file.extension === "md") {
           if (this.recorder.activePath === file.path) this.recorder.abandon();
-          this.enqueue(() => this.record({ t: Date.now(), type: "delete", path: file.path }));
+          if (this.tracked(file.path)) {
+            this.enqueue(() => this.record({ t: Date.now(), type: "delete", path: file.path }));
+          }
         }
       })
     );
@@ -108,6 +112,29 @@ export default class ContextsPlugin extends Plugin {
       name: "Dump recent history",
       callback: () => void this.dumpHistory(),
     });
+
+    this.addCommand({
+      id: "toggle-pause",
+      name: "Pause/resume recording",
+      callback: () => {
+        this.setPaused(!this.settings.paused);
+        new Notice(`Contexts: recording ${this.settings.paused ? "paused" : "resumed"}`);
+      },
+    });
+  }
+
+  /** Pause closes the open span immediately; resume reopens one for the current file. */
+  setPaused(v: boolean): void {
+    if (this.settings.paused === v) return;
+    this.settings.paused = v;
+    this.enqueue(() => (v ? this.closeSpan() : this.onActiveChange()));
+    void this.saveSettings();
+  }
+
+  /** False when recording is paused or the path sits in an excluded folder. */
+  private tracked(path: string): boolean {
+    if (this.settings.paused) return false;
+    return !this.settings.excludedFolders.some((f) => path === f || path.startsWith(f + "/"));
   }
 
   onunload() {
@@ -175,7 +202,7 @@ export default class ContextsPlugin extends Plugin {
       this.bumpActivity();
       return;
     }
-    if (!this.settings.capture.externalEdits) return;
+    if (!this.settings.capture.externalEdits || !this.tracked(file.path)) return;
     const now = Date.now();
     if (now - (this.recentDeact.get(file.path) ?? 0) < RECENT_DEACT_GRACE_MS) return;
     if (now - (this.lastExtmod.get(file.path) ?? 0) < EXTMOD_COALESCE_MS) return;
@@ -190,7 +217,7 @@ export default class ContextsPlugin extends Plugin {
     if (file) this.lastActiveMdPath = file.path;
     if ((file?.path ?? null) === this.recorder.activePath) return;
     await this.closeSpan();
-    if (file) {
+    if (file && this.tracked(file.path)) {
       const snap = await this.snapshot(file);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime);
@@ -234,7 +261,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = applyRenames(await this.getEvents());
+    const events = applyRenames(healRenames(await this.getEvents()));
     if (!events.length) {
       new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
       return;

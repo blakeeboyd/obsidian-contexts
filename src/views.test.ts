@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
-import { applyRenames, groupSessions, relatedTo, trailFor } from "./views";
+import { applyRenames, groupSessions, healRenames, relatedTo, trailFor } from "./views";
 
 const MIN = 60_000;
 
-function span(path: string, start: number, dur = 5 * MIN): SpanEvent {
-  return { t: start + dur, path, start, dur };
+function span(path: string, start: number, dur = 5 * MIN, ctime?: number): SpanEvent {
+  const ev: SpanEvent = { t: start + dur, path, start, dur };
+  if (ctime !== undefined) ev.ctime = ctime;
+  return ev;
 }
 
 describe("applyRenames", () => {
@@ -51,6 +53,59 @@ describe("applyRenames", () => {
     const out = applyRenames(events).filter((e) => !("type" in e)) as SpanEvent[];
     // The deleted file keeps its name; only the successor follows the rename.
     expect(out.map((s) => s.path)).toEqual(["A.md", "B.md"]);
+  });
+});
+
+describe("healRenames", () => {
+  it("synthesizes a rename when spans move between paths sharing a ctime", () => {
+    const events: LogEvent[] = [span("A.md", 0, 5 * MIN, 42), span("B.md", 20 * MIN, 5 * MIN, 42)];
+    const out = applyRenames(healRenames(events)).filter((e) => !("type" in e)) as SpanEvent[];
+    expect(out.map((s) => s.path)).toEqual(["B.md", "B.md"]);
+  });
+
+  it("drops the spurious delete logged for the old name", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0, 5 * MIN, 42),
+      { t: 10 * MIN, type: "delete", path: "A.md" },
+      span("B.md", 20 * MIN, 5 * MIN, 42),
+    ];
+    const healed = healRenames(events);
+    expect(healed.some((e) => "type" in e && e.type === "delete")).toBe(false);
+    const out = applyRenames(healed).filter((e) => !("type" in e)) as SpanEvent[];
+    expect(out.map((s) => s.path)).toEqual(["B.md", "B.md"]);
+  });
+
+  it("does not duplicate an explicitly logged rename", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0, 5 * MIN, 42),
+      { t: 10 * MIN, type: "rename", from: "A.md", to: "B.md" },
+      span("B.md", 20 * MIN, 5 * MIN, 42),
+    ];
+    expect(healRenames(events)).toEqual(events);
+  });
+
+  it("leaves interleaved same-ctime spans alone", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0, 5 * MIN, 42),
+      span("B.md", 20 * MIN, 5 * MIN, 42),
+      span("A.md", 40 * MIN, 5 * MIN, 42),
+    ];
+    expect(healRenames(events)).toEqual(events);
+  });
+
+  it("ignores spans with different or missing ctimes", () => {
+    const events: LogEvent[] = [span("A.md", 0, 5 * MIN, 42), span("B.md", 20 * MIN, 5 * MIN, 43), span("C.md", 40 * MIN)];
+    expect(healRenames(events)).toEqual(events);
+  });
+
+  it("heals a chain across three names", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0, 5 * MIN, 42),
+      span("B.md", 20 * MIN, 5 * MIN, 42),
+      span("C.md", 40 * MIN, 5 * MIN, 42),
+    ];
+    const out = applyRenames(healRenames(events)).filter((e) => !("type" in e)) as SpanEvent[];
+    expect(out.map((s) => s.path)).toEqual(["C.md", "C.md", "C.md"]);
   });
 });
 

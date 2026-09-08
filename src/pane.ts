@@ -2,7 +2,7 @@ import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
 import { fmtDelta, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import { isSpan } from "./recorder";
-import { applyRenames, groupSessions, relatedTo, trailFor } from "./views";
+import { applyRenames, groupSessions, healRenames, relatedTo, trailFor } from "./views";
 
 export const CONTEXTS_VIEW_TYPE = "contexts-pane";
 
@@ -42,7 +42,7 @@ export class ContextsPane extends ItemView {
     }
 
     const s = this.plugin.settings;
-    const events = applyRenames(await this.plugin.getEvents());
+    const events = applyRenames(healRenames(await this.plugin.getEvents()));
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
 
     const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? path;

@@ -19,6 +19,8 @@ export interface ContextsSettings {
   idleTimeoutMin: number; // 0 disables idle detection
   sessionGapMin: number;
   halfLifeDays: number;
+  paused: boolean;
+  excludedFolders: string[]; // normalized: trimmed, no trailing slash
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -37,6 +39,8 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   idleTimeoutMin: 15,
   sessionGapMin: 30,
   halfLifeDays: 30,
+  paused: false,
+  excludedFolders: [],
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -60,6 +64,29 @@ export class ContextsSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+
+    new Setting(containerEl).setName("Recording").setHeading();
+
+    new Setting(containerEl)
+      .setName("Pause recording")
+      .setDesc("Stop logging entirely until turned back on. Paused time simply won't exist in the record.")
+      .addToggle((t) => t.setValue(this.plugin.settings.paused).onChange((v) => this.plugin.setPaused(v)));
+
+    new Setting(containerEl)
+      .setName("Excluded folders")
+      .setDesc("One folder path per line. Nothing inside these folders is ever recorded.")
+      .addTextArea((ta) =>
+        ta
+          .setPlaceholder("00_personal\nTemplates")
+          .setValue(this.plugin.settings.excludedFolders.join("\n"))
+          .onChange(async (v) => {
+            this.plugin.settings.excludedFolders = v
+              .split("\n")
+              .map((s) => s.trim().replace(/\/+$/, ""))
+              .filter(Boolean);
+            await this.plugin.saveSettings();
+          })
+      );
 
     new Setting(containerEl).setName("Capture").setHeading()
       .setDesc("Everything is on by default. Turning a signal off skips its work entirely; it stops being recorded from that moment on.");

@@ -127,6 +127,13 @@ export class ContextsPane extends ItemView {
         setIcon(line.createSpan({ cls: "contexts-chip-icon" }), icon);
         line.setAttribute("title", label);
         line.setAttribute("aria-label", label);
+        // Same drill-down as stints: icon scans, the expansion spells it out.
+        const details = row.createDiv({ cls: "contexts-trail-details" });
+        details.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-details-header" });
+        details.createDiv({ text: ev.type === "rename" ? `${ev.from} → ${ev.to}` : ev.path });
+        details.hidden = true;
+        row.addClass("contexts-expandable");
+        row.addEventListener("click", () => (details.hidden = !details.hidden));
       }
     }
   }

@@ -1,5 +1,6 @@
 import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
-import type { EditDelta, LogEvent } from "./recorder";
+import { isSpan } from "./recorder";
+import type { EditDelta, LogEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import {
@@ -190,6 +191,15 @@ export class ContextsPane extends ItemView {
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
+    // Every visit came from somewhere: join each span to the previous active
+    // file (same session), so arrivals show even without a link click.
+    const spansSorted = events.filter(isSpan).slice().sort((a, b) => a.start - b.start);
+    const cameFrom = new Map<SpanEvent, string>();
+    for (let i = 1; i < spansSorted.length; i++) {
+      const prev = spansSorted[i - 1];
+      const cur = spansSorted[i];
+      if (prev.path !== cur.path && cur.start - prev.t <= s.sessionGapMin * 60_000) cameFrom.set(cur, prev.path);
+    }
     const trail = coalesceTrail(trailFor(path, events), s.sessionGapMin * 60_000).slice(-TRAIL_LIMIT).reverse();
     if (!trail.length) {
       contentEl.createDiv({ text: "No history yet for this file.", cls: "contexts-empty" });
@@ -216,7 +226,7 @@ export class ContextsPane extends ItemView {
           if (span.edit) {
             line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
             const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
-            this.viaLine(deltaEl, span.via, span.from);
+            this.arrivalLine(deltaEl, span, cameFrom.get(span));
             this.renderDelta(deltaEl, span.edit, path);
             this.leftLine(deltaEl, span.left);
             i++;
@@ -228,8 +238,13 @@ export class ContextsPane extends ItemView {
             line.createDiv({ text: fmtDur(readDur), cls: "contexts-span-time" });
             const readEl = line.createDiv({ cls: "contexts-span-read" });
             readEl.createSpan({ text: j - i > 1 ? `read ×${j - i}` : "read" });
-            this.viaLine(readEl, span.via, span.from);
-            this.leftLine(readEl, visits[j - 1].left);
+            // Arrival belongs to the chronologically first span of the run,
+            // exit to the last — which end of the iteration those are depends
+            // on the display order.
+            const chronoFirst = s.trailDetailNewestFirst ? visits[j - 1] : span;
+            const chronoLast = s.trailDetailNewestFirst ? span : visits[j - 1];
+            this.arrivalLine(readEl, chronoFirst, cameFrom.get(chronoFirst));
+            this.leftLine(readEl, chronoLast.left);
             i = j;
           }
         }
@@ -453,11 +468,22 @@ export class ContextsPane extends ItemView {
     el.createDiv({ text: label, cls: "contexts-via" });
   }
 
-  /** How the visit began: "via link from X" (clickable), or the UI surface it was opened through. */
-  private viaLine(el: HTMLElement, via?: string, fromPath?: string): void {
+  /**
+   * How the visit began: "via link from X" when a link was followed, else
+   * "from X" (the previous active file) plus the UI surface when known.
+   */
+  private arrivalLine(el: HTMLElement, span: SpanEvent, cameFrom?: string): void {
+    const surface =
+      span.via === "explorer" ? "via file explorer"
+      : span.via === "search" ? "via search"
+      : span.via === "switcher" ? "via quick switcher"
+      : span.via && span.via !== "link" ? `via ${span.via}`
+      : "";
+    const fromPath = span.from ?? cameFrom;
+    if (!fromPath && !surface) return;
+    const div = el.createDiv({ cls: "contexts-via" });
     if (fromPath) {
-      const div = el.createDiv({ cls: "contexts-via" });
-      div.createSpan({ text: "via link from " });
+      div.createSpan({ text: span.from ? "via link from " : "from " });
       const name = fromPath.split("/").pop()?.replace(/\.md$/, "") ?? fromPath;
       const link = div.createSpan({ text: name, cls: "contexts-link" });
       link.setAttribute("title", fromPath);
@@ -465,15 +491,10 @@ export class ContextsPane extends ItemView {
         evt.stopPropagation();
         this.openPath(fromPath, evt);
       });
-      return;
+      if (surface) div.createSpan({ text: ` · ${surface}` });
+    } else {
+      div.createSpan({ text: surface });
     }
-    if (!via) return;
-    const label =
-      via === "explorer" ? "via file explorer"
-      : via === "search" ? "via search"
-      : via === "switcher" ? "via quick switcher"
-      : `via ${via}`;
-    el.createDiv({ text: label, cls: "contexts-via" });
   }
 
   /** A line of clickable link names: "label: A, B, C" where each name opens its file. */

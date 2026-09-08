@@ -226,8 +226,8 @@ export default class ContextsPlugin extends Plugin {
       const snap = await this.snapshot(file, false);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime);
-      this.refreshPane();
     }
+    this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
   }
 
   private async closeSpan(end?: number): Promise<void> {

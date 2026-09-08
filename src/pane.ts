@@ -43,7 +43,10 @@ export class ContextsPane extends ItemView {
     const events = applyRenames(healRenames(await this.plugin.getEvents()));
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
 
-    const path = this.plugin.lastActiveMdPath;
+    // Sticky path only counts while a note is actually open somewhere;
+    // close all notes and the pane falls back to the sessions view.
+    const anyNoteOpen = this.app.workspace.getLeavesOfType("markdown").length > 0;
+    const path = anyNoteOpen ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderSessions(contentEl, sessions);
       return;

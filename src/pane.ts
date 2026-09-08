@@ -2,12 +2,16 @@ import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
 import type { EditDelta } from "./recorder";
 import { fmtClock, fmtDelta, fmtDeltaVerbose, fmtDur, fmtTime, relTime } from "./format";
 import type ContextsPlugin from "./main";
-import { applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
+import { Session, applyRenames, coalesceTrail, groupSessions, healRenames, isStint, relatedTo, trailFor } from "./views";
 
 export const CONTEXTS_VIEW_TYPE = "contexts-pane";
 
 const RELATED_LIMIT = 15;
 const TRAIL_LIMIT = 30;
+// The no-note fallback view. ponytail: a full session browser (own tab,
+// per-session drill-down) is ticket 05.0302; this is the lazy version.
+const SESSION_LIMIT = 5;
+const FILES_PER_SESSION = 12;
 
 export class ContextsPane extends ItemView {
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
@@ -35,15 +39,15 @@ export class ContextsPane extends ItemView {
     contentEl.empty();
     contentEl.addClass("contexts-pane");
 
-    const path = this.plugin.lastActiveMdPath;
-    if (!path) {
-      contentEl.createDiv({ text: "Open a note to see its context.", cls: "contexts-empty" });
-      return;
-    }
-
     const s = this.plugin.settings;
     const events = applyRenames(healRenames(await this.plugin.getEvents()));
     const sessions = groupSessions(events, s.sessionGapMin * 60_000);
+
+    const path = this.plugin.lastActiveMdPath;
+    if (!path) {
+      this.renderSessions(contentEl, sessions);
+      return;
+    }
 
     const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
     contentEl.createDiv({ text: basename, cls: "contexts-title" });
@@ -115,6 +119,31 @@ export class ContextsPane extends ItemView {
           : ev.type === "extmod" ? "edited externally"
           : "renamed";
         row.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-trail-delta" });
+      }
+    }
+  }
+
+  /** No note open: show the last few sessions and the files each touched. */
+  private renderSessions(contentEl: HTMLElement, sessions: Session[]): void {
+    contentEl.createDiv({ text: "Recent sessions", cls: "contexts-title" });
+    if (!sessions.length) {
+      contentEl.createDiv({ text: "Nothing recorded yet. Work in some notes and come back.", cls: "contexts-empty" });
+      return;
+    }
+    for (const sess of sessions.slice(-SESSION_LIMIT).reverse()) {
+      const engaged = sess.spans.reduce((sum, sp) => sum + sp.dur, 0);
+      contentEl.createDiv({
+        text: `${fmtTime(sess.start)} → ${fmtClock(sess.end)} · ${fmtDur(engaged)} engaged`,
+        cls: "contexts-section",
+      });
+      for (const f of sess.files.slice(0, FILES_PER_SESSION)) {
+        const row = contentEl.createDiv({ cls: "contexts-row" });
+        row.createDiv({ text: f.split("/").pop()?.replace(/\.md$/, "") ?? f });
+        row.setAttribute("aria-label", f);
+        row.addEventListener("click", (evt) => this.openPath(f, evt));
+      }
+      if (sess.files.length > FILES_PER_SESSION) {
+        contentEl.createDiv({ text: `+${sess.files.length - FILES_PER_SESSION} more`, cls: "contexts-empty" });
       }
     }
   }

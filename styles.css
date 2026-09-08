@@ -196,3 +196,8 @@
   color: var(--text-muted);
   background: var(--background-modifier-hover);
 }
+
+.contexts-rel-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}

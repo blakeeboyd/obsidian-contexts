@@ -1,24 +1,89 @@
-import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type { EditDelta } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import {
-  PAIR_SEP,
   PairScore,
   Session,
+  UNRELATED_WEIGHT,
   allRelationships,
   applyRenames,
   coalesceTrail,
   groupSessions,
   healRenames,
   isStint,
-  pairKey,
   relatedTo,
   trailFor,
   unrelatedPairs,
 } from "./views";
 
 export const CONTEXTS_VIEW_TYPE = "contexts-pane";
+
+/** One relationship row: clickable names, score meta, dismiss/restore action. Shared by pane and modal. */
+function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairScore, onToggled?: () => void): void {
+  const row = container.createDiv({ cls: "contexts-row" });
+  const title = row.createDiv({ cls: "contexts-row-title" });
+  const base = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+  const nameSpan = (path: string) => {
+    const el = title.createSpan({ text: base(path), cls: "contexts-link" });
+    el.setAttribute("title", path);
+    el.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      const file = plugin.app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile) void plugin.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+    });
+  };
+  nameSpan(p.a);
+  title.createSpan({ text: " ↔ " });
+  nameSpan(p.b);
+  const meta = p.dismissed
+    ? `${p.rawScore.toFixed(2)} → ${p.score.toFixed(2)} · marked unrelated · ${p.sharedSessions} shared`
+    : `${p.score.toFixed(2)} · ${p.sharedSessions} shared · ${relTime(p.lastAt)}`;
+  row.createDiv({ text: meta, cls: "contexts-row-meta" });
+  const btn = row.createDiv({ cls: "contexts-row-action" });
+  setIcon(btn, p.dismissed ? "rotate-ccw" : "x");
+  btn.setAttribute("title", p.dismissed ? "Restore the connection" : "Not related: weight near zero");
+  btn.addEventListener("click", (evt) => {
+    evt.stopPropagation();
+    plugin.markRelated(p.a, p.b, p.dismissed);
+    p.dismissed = !p.dismissed;
+    p.score = p.dismissed ? p.rawScore * UNRELATED_WEIGHT : p.rawScore;
+    onToggled?.();
+  });
+}
+
+/** The full ranked audit of every pair the log knows, via "Contexts: Show all relationships". */
+export class RelationshipsModal extends Modal {
+  constructor(app: App, private plugin: ContextsPlugin, private pairs: PairScore[]) {
+    super(app);
+  }
+
+  onOpen(): void {
+    this.titleEl.setText("Contexts: all relationships");
+    this.renderList();
+  }
+
+  private renderList(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    if (!this.pairs.length) {
+      contentEl.createDiv({ text: "No co-activations recorded yet.", cls: "contexts-empty" });
+      return;
+    }
+    const list = contentEl.createDiv({ cls: "contexts-rel-list" });
+    const sorted = [...this.pairs].sort((a, b) => b.score - a.score);
+    const shown = sorted.slice(0, 200);
+    for (const p of sorted.slice(200)) if (p.dismissed) shown.push(p); // hidden pairs always auditable
+    for (const p of shown) renderPairRow(this.plugin, list, p, () => this.renderList());
+    if (sorted.length > shown.length) {
+      list.createDiv({ text: `top ${shown.length} of ${sorted.length}`, cls: "contexts-empty" });
+    }
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
 
 const RELATED_LIMIT = 15;
 const TRAIL_LIMIT = 30;
@@ -69,7 +134,7 @@ export class ContextsPane extends ItemView {
     const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderSessions(contentEl, sessions);
-      this.renderRelationships(contentEl, sessions, unrelatedPairs(events));
+      this.renderHiddenConnections(contentEl, sessions, unrelatedPairs(events));
       return;
     }
 
@@ -96,8 +161,7 @@ export class ContextsPane extends ItemView {
         onClick: () => this.plugin.markRelated(path, r.path, !!r.dismissed),
       });
     }
-    this.renderDismissed(contentEl, path, dismissed, related);
-    this.renderRelationships(contentEl, sessions, dismissed);
+    this.renderHiddenConnections(contentEl, sessions, dismissed);
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
@@ -185,91 +249,28 @@ export class ContextsPane extends ItemView {
    * opens the native file menu.
    */
   /**
-   * The audit view of the relationship model: every pair ranked by effective
-   * score, dismissed ones showing raw → demoted. Out of the way by default —
-   * one "See connections" reveal at the pane's bottom.
+   * The pane surfaces only what the user hid: dismissed pairs, restorable.
+   * The full ranked audit lives behind the "Show all relationships" command.
    */
-  private renderRelationships(contentEl: HTMLElement, sessions: Session[], dismissed: Set<string>): void {
+  private renderHiddenConnections(contentEl: HTMLElement, sessions: Session[], dismissed: Set<string>): void {
+    if (!dismissed.size) return;
     const s = this.plugin.settings;
-    const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed);
+    const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed).filter(
+      (p) => p.dismissed
+    );
     if (!pairs.length) return;
+    const label = (open: boolean) => (open ? "Hide hidden connections" : `See hidden connections (${pairs.length})`);
     const toggle = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable" });
-    setIcon(toggle.createSpan({ cls: "contexts-chip-icon" }), "network");
-    toggle.createSpan({ text: this.relationshipsOpen ? "Hide connections" : "See connections" });
+    setIcon(toggle.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
+    toggle.createSpan({ text: label(this.relationshipsOpen) });
     const list = contentEl.createDiv();
     list.hidden = !this.relationshipsOpen;
     toggle.addEventListener("click", () => {
       this.relationshipsOpen = !this.relationshipsOpen;
       list.hidden = !this.relationshipsOpen;
-      toggle.lastChild!.textContent = this.relationshipsOpen ? "Hide connections" : "See connections";
+      toggle.lastChild!.textContent = label(this.relationshipsOpen);
     });
-    const shown = pairs.slice(0, RELATIONSHIPS_LIMIT);
-    for (const p of pairs.slice(RELATIONSHIPS_LIMIT)) if (p.dismissed) shown.push(p); // demoted pairs always auditable
-    for (const p of shown) this.pairRow(list, p);
-    if (pairs.length > shown.length) {
-      list.createDiv({ text: `top ${shown.length} of ${pairs.length}`, cls: "contexts-empty" });
-    }
-  }
-
-  private pairRow(container: HTMLElement, p: PairScore): void {
-    const row = container.createDiv({ cls: "contexts-row" });
-    const title = row.createDiv({ cls: "contexts-row-title" });
-    const base = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
-    const nameSpan = (path: string) => {
-      const el = title.createSpan({ text: base(path), cls: "contexts-link" });
-      el.setAttribute("title", path);
-      el.addEventListener("click", (evt) => {
-        evt.stopPropagation();
-        this.openPath(path, evt);
-      });
-    };
-    nameSpan(p.a);
-    title.createSpan({ text: " ↔ " });
-    nameSpan(p.b);
-    const meta = p.dismissed
-      ? `${p.rawScore.toFixed(2)} → ${p.score.toFixed(2)} · marked unrelated · ${p.sharedSessions} shared`
-      : `${p.score.toFixed(2)} · ${p.sharedSessions} shared · ${relTime(p.lastAt)}`;
-    row.createDiv({ text: meta, cls: "contexts-row-meta" });
-    const btn = row.createDiv({ cls: "contexts-row-action" });
-    setIcon(btn, p.dismissed ? "rotate-ccw" : "x");
-    btn.setAttribute("title", p.dismissed ? "Restore the connection" : "Not related: weight near zero");
-    btn.addEventListener("click", (evt) => {
-      evt.stopPropagation();
-      this.plugin.markRelated(p.a, p.b, p.dismissed);
-    });
-  }
-
-  /**
-   * Dismissed pairs not visible in the ranking (demotion usually pushes them
-   * out of the top rows) still need a restore path: a quiet expandable list.
-   */
-  private renderDismissed(
-    contentEl: HTMLElement,
-    path: string,
-    dismissed: Set<string>,
-    shown: { path: string }[]
-  ): void {
-    const visible = new Set(shown.map((r) => r.path));
-    const partners = [...dismissed]
-      .map((k) => k.split(PAIR_SEP))
-      .filter((pair) => pair.includes(path))
-      .map((pair) => (pair[0] === path ? pair[1] : pair[0]))
-      .filter((other) => !visible.has(other));
-    if (!partners.length) return;
-    const toggle = contentEl.createDiv({
-      text: `${partners.length} marked unrelated`,
-      cls: "contexts-empty contexts-expandable",
-    });
-    const list = contentEl.createDiv();
-    list.hidden = true;
-    toggle.addEventListener("click", () => (list.hidden = !list.hidden));
-    for (const other of partners) {
-      this.fileRow(list, other, "unrelated", {
-        icon: "rotate-ccw",
-        tooltip: "Restore the connection",
-        onClick: () => this.plugin.markRelated(path, other, true),
-      });
-    }
+    for (const p of pairs) renderPairRow(this.plugin, list, p);
   }
 
   private fileRow(

@@ -1,7 +1,7 @@
 import { App, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
-import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
+import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import {
   LeaveReason,
   LogEvent,
@@ -22,7 +22,7 @@ import {
   stripCodeFences,
 } from "./recorder";
 import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
-import { applyRenames, groupSessions, healRenames, relatedTo } from "./views";
+import { allRelationships, applyRenames, groupSessions, healRenames, relatedTo, unrelatedPairs } from "./views";
 
 // A modify event on a path this soon after its span closed is the editor's
 // trailing autosave, not an external edit.
@@ -145,6 +145,12 @@ export default class ContextsPlugin extends Plugin {
       id: "dump-recent-history",
       name: "Dump recent history",
       callback: () => void this.dumpHistory(),
+    });
+
+    this.addCommand({
+      id: "show-relationships",
+      name: "Show all relationships",
+      callback: () => void this.showRelationships(),
     });
 
     this.addCommand({
@@ -413,6 +419,18 @@ export default class ContextsPlugin extends Plugin {
       italic: fmt.italic,
       fm,
     };
+  }
+
+  private async showRelationships(): Promise<void> {
+    const events = applyRenames(healRenames(await this.getEvents()));
+    const sessions = groupSessions(events, this.settings.sessionGapMin * 60_000);
+    const pairs = allRelationships(
+      sessions,
+      Date.now(),
+      this.settings.halfLifeDays * 24 * 3600_000,
+      unrelatedPairs(events)
+    );
+    new RelationshipsModal(this.app, this, pairs).open();
   }
 
   private async dumpHistory(): Promise<void> {

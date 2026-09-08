@@ -238,7 +238,7 @@ export class ContextsPane extends ItemView {
     }
     row.setAttribute("aria-label", path);
     row.addEventListener("click", (evt) => this.openPath(path, evt));
-    row.addEventListener("mouseover", (evt) => {
+    const hover = (evt: MouseEvent) => {
       this.app.workspace.trigger("hover-link", {
         event: evt,
         source: CONTEXTS_VIEW_TYPE,
@@ -246,6 +246,12 @@ export class ContextsPane extends ItemView {
         targetEl: row,
         linktext: path,
       });
+    };
+    row.addEventListener("mouseover", hover);
+    // mouseover alone misses "hover first, THEN press Cmd" — re-trigger while
+    // the modifier is down so the mod-gated preview actually appears.
+    row.addEventListener("mousemove", (evt) => {
+      if (Keymap.isModifier(evt, "Mod")) hover(evt);
     });
     row.addEventListener("contextmenu", (evt) => {
       const file = this.app.vault.getAbstractFileByPath(path);

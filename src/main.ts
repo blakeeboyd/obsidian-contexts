@@ -60,7 +60,7 @@ export default class ContextsPlugin extends Plugin {
     this.log = new EventLog(this.app.vault.adapter, `${this.manifest.dir}/log`, getDeviceId());
 
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
-    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: false });
+    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
     this.patchOpenLinkText();
     this.patchSuggestModal();
 

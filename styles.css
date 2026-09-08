@@ -224,3 +224,13 @@
   padding: 8px 10px;
   margin: 4px 0;
 }
+
+.contexts-gone .contexts-row-title,
+.contexts-gone-name {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.contexts-gone {
+  cursor: default;
+}

@@ -29,8 +29,9 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   const title = row.createDiv({ cls: "contexts-row-title" });
   const base = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
   const nameSpan = (path: string) => {
-    const el = title.createSpan({ text: base(path), cls: "contexts-link" });
-    el.setAttribute("title", path);
+    const exists = !!plugin.app.vault.getAbstractFileByPath(path);
+    const el = title.createSpan({ text: base(path), cls: exists ? "contexts-link" : "contexts-gone-name" });
+    el.setAttribute("title", exists ? path : `${path} (no longer exists)`);
     el.addEventListener("click", (evt) => {
       evt.stopPropagation();
       const file = plugin.app.vault.getAbstractFileByPath(path);
@@ -340,8 +341,13 @@ export class ContextsPane extends ItemView {
     action?: { icon: string; tooltip: string; onClick: () => void }
   ): void {
     const row = container.createDiv({ cls: "contexts-row" });
+    // History is real whether or not the file survived; a dead companion is
+    // shown honestly rather than offering a door that opens nowhere.
+    const exists = !!this.app.vault.getAbstractFileByPath(path);
+    if (!exists) row.addClass("contexts-gone");
     row.createDiv({ text: path.split("/").pop()?.replace(/\.md$/, "") ?? path, cls: "contexts-row-title" });
     const metaLine = row.createDiv({ cls: "contexts-row-meta contexts-row-metaline" });
+    if (!exists) metaLine.createSpan({ text: "no longer exists · ", cls: "contexts-row-folder" });
     // Middle-truncate deep paths to one line: firstfolder/…/lastfolder/
     const segs = path.split("/").slice(0, -1);
     const folder =

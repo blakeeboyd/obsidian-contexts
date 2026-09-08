@@ -87,6 +87,7 @@ export class DayBlock extends MarkdownRenderChild {
         const dur = spans.reduce((sum, sp) => sum + sp.dur, 0);
         const edit = mergeDeltas(spans.map((sp) => sp.edit).filter((e): e is EditDelta => !!e));
         const row = list.createDiv({ cls: "contexts-row" });
+        if (!this.plugin.app.vault.getAbstractFileByPath(f)) row.addClass("contexts-gone");
         row.createDiv({ text: f.split("/").pop()?.replace(/\.md$/, "") ?? f, cls: "contexts-row-title" });
         const meta = row.createDiv({ cls: "contexts-row-meta contexts-row-metaline" });
         meta.createSpan({

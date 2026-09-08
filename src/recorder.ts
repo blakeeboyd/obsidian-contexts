@@ -146,12 +146,22 @@ export interface SpanEvent {
   ctime?: number; // file creation time, the identity anchor for healing external renames
   /** The file this one was opened FROM via a clicked link — the user followed a connection. Absent = opened some other way. */
   from?: string;
+  /** How the file was opened. Absent = untracked surface (ribbon, plugin, programmatic). */
+  via?: OpenMethod;
   /** How the visit ended. "switch" = went to another file; "close" = tab closed; "blur" = left the app; plus idle/quit/pause. */
   left?: LeaveReason;
   edit?: EditDelta;
 }
 
 export type LeaveReason = "switch" | "close" | "blur" | "idle" | "quit" | "pause";
+// ponytail: "switcher" is any SuggestModal selection — quick switcher in
+// practice, but command-palette file opens land there too.
+export type OpenMethod = "link" | "explorer" | "search" | "switcher";
+
+export interface Opened {
+  via: OpenMethod;
+  from?: string; // only for via "link"
+}
 
 /** Renames must be logged or a file's trail breaks permanently. */
 export interface RenameEvent {
@@ -290,14 +300,14 @@ export function diffSnapshots(before: Snapshot, after: Snapshot): EditDelta | un
 }
 
 export class Recorder {
-  private current: { path: string; start: number; snap: Snapshot; ctime?: number; from?: string } | null = null;
+  private current: { path: string; start: number; snap: Snapshot; ctime?: number; opened?: Opened } | null = null;
 
   get activePath(): string | null {
     return this.current?.path ?? null;
   }
 
-  activate(path: string, snap: Snapshot, now: number, ctime?: number, from?: string): void {
-    this.current = { path, start: now, snap, ctime, from };
+  activate(path: string, snap: Snapshot, now: number, ctime?: number, opened?: Opened): void {
+    this.current = { path, start: now, snap, ctime, opened };
   }
 
   /**
@@ -316,10 +326,13 @@ export class Recorder {
     const edit = after ? diffSnapshots(cur.snap, after) : undefined;
     // A short glance is droppable; a glance that edited OR arrived via a
     // followed link is behavior worth keeping.
-    if (dur < MIN_SPAN_MS && !edit && cur.from === undefined) return null;
+    if (dur < MIN_SPAN_MS && !edit && cur.opened?.from === undefined) return null;
     const ev: SpanEvent = { t: end, path: cur.path, start: cur.start, dur };
     if (cur.ctime !== undefined) ev.ctime = cur.ctime;
-    if (cur.from !== undefined) ev.from = cur.from;
+    if (cur.opened) {
+      ev.via = cur.opened.via;
+      if (cur.opened.from !== undefined) ev.from = cur.opened.from;
+    }
     if (left) ev.left = left;
     if (edit) ev.edit = edit;
     return ev;

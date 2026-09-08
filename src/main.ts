@@ -1,10 +1,12 @@
-import { App, MarkdownView, Modal, Notice, Plugin, TFile, parseYaml } from "obsidian";
+import { App, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { CONTEXTS_VIEW_TYPE, ContextsPane } from "./pane";
 import {
   LeaveReason,
   LogEvent,
+  OpenMethod,
+  Opened,
   Recorder,
   Snapshot,
   extractFootnotes,
@@ -47,6 +49,8 @@ export default class ContextsPlugin extends Plugin {
   private events: LogEvent[] | null = null;
   // Set when a link click routed through openLinkText; consumed by the next activation.
   private pendingLinkFrom: { from: string; t: number } | null = null;
+  // The last open-capable UI surface the user touched (explorer click, search click, modal selection).
+  private lastUiOpen: { via: OpenMethod; t: number } | null = null;
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -58,6 +62,22 @@ export default class ContextsPlugin extends Plugin {
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: false });
     this.patchOpenLinkText();
+    this.patchSuggestModal();
+
+    // Classify open-capable surfaces by where the mouse went down; the next
+    // activation within the window inherits the hint.
+    this.registerDomEvent(
+      document,
+      "mousedown",
+      (evt) => {
+        const el = evt.target instanceof Element ? evt.target : null;
+        if (!el) return;
+        if (el.closest(".nav-files-container")) this.lastUiOpen = { via: "explorer", t: Date.now() };
+        else if (el.closest('.workspace-leaf-content[data-type="search"]'))
+          this.lastUiOpen = { via: "search", t: Date.now() };
+      },
+      { capture: true }
+    );
     this.addRibbonIcon("footprints", "Open Contexts pane", () => void this.activatePane());
     this.addCommand({
       id: "open-pane",
@@ -164,6 +184,26 @@ export default class ContextsPlugin extends Plugin {
     };
     this.register(() => {
       proto.openLinkText = orig;
+    });
+  }
+
+  /**
+   * Quick switcher (and every other suggest modal — command palette included)
+   * confirms selection through SuggestModal.selectSuggestion, keyboard and
+   * click alike. A file activation right after one is an open via that modal.
+   */
+  private patchSuggestModal(): void {
+    const plugin = this;
+    const proto = SuggestModal.prototype as unknown as {
+      selectSuggestion: (this: unknown, ...args: unknown[]) => unknown;
+    };
+    const orig = proto.selectSuggestion;
+    proto.selectSuggestion = function (...args: unknown[]) {
+      plugin.lastUiOpen = { via: "switcher", t: Date.now() };
+      return orig.apply(this, args);
+    };
+    this.register(() => {
+      proto.selectSuggestion = orig;
     });
   }
 
@@ -279,15 +319,21 @@ export default class ContextsPlugin extends Plugin {
         });
       }
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
-      const pending = this.pendingLinkFrom;
-      this.pendingLinkFrom = null;
-      const from =
-        pending && Date.now() - pending.t < LINK_OPEN_WINDOW_MS && pending.from !== file.path
-          ? pending.from
-          : undefined;
-      this.recorder.activate(file.path, snap, Date.now(), ctime, from);
+      this.recorder.activate(file.path, snap, Date.now(), ctime, this.consumeOpened(file.path));
     }
     this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
+  }
+
+  /** How this activation came about: a followed link beats a UI-surface hint; both windows are short. */
+  private consumeOpened(path: string): Opened | undefined {
+    const link = this.pendingLinkFrom;
+    const ui = this.lastUiOpen;
+    this.pendingLinkFrom = null;
+    this.lastUiOpen = null;
+    const now = Date.now();
+    if (link && now - link.t < LINK_OPEN_WINDOW_MS && link.from !== path) return { via: "link", from: link.from };
+    if (ui && now - ui.t < LINK_OPEN_WINDOW_MS) return { via: ui.via };
+    return undefined;
   }
 
   private async closeSpan(end?: number, left: LeaveReason = "switch"): Promise<void> {

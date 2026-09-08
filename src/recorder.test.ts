@@ -120,23 +120,32 @@ describe("diffSnapshots", () => {
   });
 });
 
-describe("Recorder link provenance", () => {
+describe("Recorder open provenance", () => {
   it("stamps the span with the file it was opened from", () => {
     const r = new Recorder();
-    r.activate("B.md", snap(), 0, undefined, "A.md");
+    r.activate("B.md", snap(), 0, undefined, { via: "link", from: "A.md" });
     const ev = r.deactivate(snap(), 5000);
     expect(ev?.from).toBe("A.md");
+    expect(ev?.via).toBe("link");
   });
 
-  it("omits from when the file was opened another way", () => {
+  it("records the UI surface when there is no source file", () => {
+    const r = new Recorder();
+    r.activate("B.md", snap(), 0, undefined, { via: "switcher" });
+    const ev = r.deactivate(snap(), 5000);
+    expect(ev?.via).toBe("switcher");
+    expect(ev?.from).toBeUndefined();
+  });
+
+  it("omits provenance when the file was opened another way", () => {
     const r = new Recorder();
     r.activate("B.md", snap(), 0);
-    expect(r.deactivate(snap(), 5000)?.from).toBeUndefined();
+    expect(r.deactivate(snap(), 5000)?.via).toBeUndefined();
   });
 
   it("keeps a sub-minimum glance that arrived via a link", () => {
     const r = new Recorder();
-    r.activate("B.md", snap(), 0, undefined, "A.md");
+    r.activate("B.md", snap(), 0, undefined, { via: "link", from: "A.md" });
     const ev = r.deactivate(snap(), 1000);
     expect(ev?.from).toBe("A.md");
   });

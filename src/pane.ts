@@ -97,7 +97,7 @@ export class ContextsPane extends ItemView {
           if (span.edit) {
             line.createDiv({ text: fmtDur(span.dur), cls: "contexts-span-time" });
             const deltaEl = line.createDiv({ cls: "contexts-span-delta" });
-            if (span.from) this.viaLine(deltaEl, span.from);
+            this.viaLine(deltaEl, span.via, span.from);
             this.renderDelta(deltaEl, span.edit, path);
             this.leftLine(deltaEl, span.left);
             i++;
@@ -109,7 +109,7 @@ export class ContextsPane extends ItemView {
             line.createDiv({ text: fmtDur(readDur), cls: "contexts-span-time" });
             const readEl = line.createDiv({ cls: "contexts-span-read" });
             readEl.createSpan({ text: j - i > 1 ? `read ×${j - i}` : "read" });
-            if (span.from) this.viaLine(readEl, span.from);
+            this.viaLine(readEl, span.via, span.from);
             this.leftLine(readEl, visits[j - 1].left);
             i = j;
           }
@@ -257,17 +257,27 @@ export class ContextsPane extends ItemView {
     el.createDiv({ text: label, cls: "contexts-via" });
   }
 
-  /** "via link from X": this visit began by clicking a link in X. The name opens that file. */
-  private viaLine(el: HTMLElement, fromPath: string): void {
-    const div = el.createDiv({ cls: "contexts-via" });
-    div.createSpan({ text: "via link from " });
-    const name = fromPath.split("/").pop()?.replace(/\.md$/, "") ?? fromPath;
-    const link = div.createSpan({ text: name, cls: "contexts-link" });
-    link.setAttribute("title", fromPath);
-    link.addEventListener("click", (evt) => {
-      evt.stopPropagation();
-      this.openPath(fromPath, evt);
-    });
+  /** How the visit began: "via link from X" (clickable), or the UI surface it was opened through. */
+  private viaLine(el: HTMLElement, via?: string, fromPath?: string): void {
+    if (fromPath) {
+      const div = el.createDiv({ cls: "contexts-via" });
+      div.createSpan({ text: "via link from " });
+      const name = fromPath.split("/").pop()?.replace(/\.md$/, "") ?? fromPath;
+      const link = div.createSpan({ text: name, cls: "contexts-link" });
+      link.setAttribute("title", fromPath);
+      link.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        this.openPath(fromPath, evt);
+      });
+      return;
+    }
+    if (!via) return;
+    const label =
+      via === "explorer" ? "via file explorer"
+      : via === "search" ? "via search"
+      : via === "switcher" ? "via quick switcher"
+      : `via ${via}`;
+    el.createDiv({ text: label, cls: "contexts-via" });
   }
 
   /** A line of clickable link names: "label: A, B, C" where each name opens its file. */

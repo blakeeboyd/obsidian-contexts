@@ -136,7 +136,7 @@ export class ContextsSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Excluded folders")
-      .setDesc("Nothing inside these folders is ever recorded.")
+      .setDesc("Files in these folders are still recorded and keep their own trail, but stay out of contexts and relatedness.")
       .addButton((b) =>
         b.setButtonText("Add folder").onClick(async () => {
           this.plugin.settings.excludedFolders.push("");

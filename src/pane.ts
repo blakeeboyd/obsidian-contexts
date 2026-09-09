@@ -154,12 +154,18 @@ export class ContextsPane extends ItemView {
     contentEl.addClass("contexts-pane");
 
     const s = this.plugin.settings;
-    const events = excludeFolders(applyRenames(healRenames(await this.plugin.getEvents())), s.excludedFolders);
-    const sessions = groupSessions(events, s.sessionGapMin * 60_000);
+    // Everything is logged; exclusion is a read-time privacy line for
+    // RELATIONS only. Excluded files keep their own trail and show in day
+    // views, but cannot belong to contexts or relatedness — so the full
+    // stream feeds trails, and the excluded stream feeds everything that
+    // connects files to each other.
+    const events = applyRenames(healRenames(await this.plugin.getEvents()));
+    const relEvents = excludeFolders(events, s.excludedFolders);
+    const sessions = groupSessions(relEvents, s.sessionGapMin * 60_000);
 
     // The declared context, always visible, one click to switch — the cheap
     // gesture the declared-context model depends on.
-    const ctx = currentContext(events);
+    const ctx = currentContext(relEvents);
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
     setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
     ctxLine.createSpan({ text: ctx ? `Context: ${ctx}` : "No context declared" });
@@ -168,7 +174,7 @@ export class ContextsPane extends ItemView {
 
     // The guess, offered quietly: recognition of a return to a known context.
     // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.
-    const guess = guessContext(events, Date.now(), s.halfLifeDays * 24 * 3600_000);
+    const guess = guessContext(relEvents, Date.now(), s.halfLifeDays * 24 * 3600_000);
     if (guess) {
       const guessLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
       setIcon(guessLine.createSpan({ cls: "contexts-chip-icon" }), "sparkles");
@@ -185,63 +191,64 @@ export class ContextsPane extends ItemView {
     const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderActiveFiles(contentEl, events);
-      this.renderSessions(contentEl, sessions);
+      this.renderSessions(contentEl, groupSessions(events, s.sessionGapMin * 60_000));
       return;
     }
 
     const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
     contentEl.createDiv({ text: basename, cls: "contexts-title" });
 
-    // An excluded file looks identical to a never-recorded one; say why it's
-    // blank so hidden doesn't read as missing.
+    // Excluded files are still logged and their trail still shows; what they
+    // lose is membership — no contexts, no relatedness. Say so.
     const excludedBy = s.excludedFolders.find((f) => path === f || path.startsWith(f + "/"));
     if (excludedBy) {
       contentEl.createDiv({
-        text: `This file is in the excluded folder "${excludedBy}". Nothing is recorded here, and any history from before the exclusion is hidden, not gone. Remove the folder from Excluded folders in settings to see it.`,
-        cls: "contexts-empty",
-      });
-      return;
-    }
-
-    // The threads this file belongs to: its context memberships, by engaged time.
-    const threads = fileContexts(events, path);
-    if (threads.length) {
-      contentEl.createDiv({
-        text: `threads: ${threads.map((th) => `${th.name} (${fmtDur(th.dur)})`).join(" · ")}`,
-        cls: "contexts-row-meta",
-      });
-    }
-
-    // Related now: the co-activation ranking for this file.
-    contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
-    const halfLife = s.halfLifeDays * 24 * 3600_000;
-    const dismissed = unrelatedPairs(events);
-    // Dismissed pairs leave the list outright (the user said "not related");
-    // pairs below the evidence floor never enter it (relatedness is a
-    // conclusion, not a default — same-session alone doesn't clear the bar).
-    const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(events))
-      .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
-      .slice(0, RELATED_LIMIT);
-    if (!related.length) {
-      contentEl.createDiv({
-        text: `Nothing yet. ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded; companionship accumulates as you work.`,
+        text: `In the excluded folder "${excludedBy}": the trail is recorded and shown, but this file stays out of contexts and relatedness.`,
         cls: "contexts-empty",
       });
     }
-    for (const r of related) {
-      this.fileRow(contentEl, r.path, `${r.sharedSessions} session${r.sharedSessions === 1 ? "" : "s"} · ${relTime(r.lastAt)}`, {
-        icon: "x",
-        tooltip: "Not related: keep tracking, but weight this connection near zero",
-        onClick: () => this.plugin.markRelated(path, r.path, false),
-      });
+
+    if (!excludedBy) {
+      // The threads this file belongs to: its context memberships, by engaged time.
+      const threads = fileContexts(relEvents, path);
+      if (threads.length) {
+        contentEl.createDiv({
+          text: `threads: ${threads.map((th) => `${th.name} (${fmtDur(th.dur)})`).join(" · ")}`,
+          cls: "contexts-row-meta",
+        });
+      }
+
+      // Related now: the co-activation ranking for this file.
+      contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
+      const halfLife = s.halfLifeDays * 24 * 3600_000;
+      const dismissed = unrelatedPairs(relEvents);
+      // Dismissed pairs leave the list outright (the user said "not related");
+      // pairs below the evidence floor never enter it (relatedness is a
+      // conclusion, not a default — same-session alone doesn't clear the bar).
+      const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(relEvents))
+        .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
+        .slice(0, RELATED_LIMIT);
+      if (!related.length) {
+        contentEl.createDiv({
+          text: `Nothing yet. ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded; companionship accumulates as you work.`,
+          cls: "contexts-empty",
+        });
+      }
+      for (const r of related) {
+        this.fileRow(contentEl, r.path, `${r.sharedSessions} session${r.sharedSessions === 1 ? "" : "s"} · ${relTime(r.lastAt)}`, {
+          icon: "x",
+          tooltip: "Not related: keep tracking, but weight this connection near zero",
+          onClick: () => this.plugin.markRelated(path, r.path, false),
+        });
+      }
+      this.renderHiddenConnections(contentEl, sessions, dismissed, path);
     }
-    this.renderHiddenConnections(contentEl, sessions, dismissed, path);
 
     // Trail: this file's own history, newest first.
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
     // Every visit came from somewhere: join each span to the previous active
     // file (same session), so arrivals show even without a link click.
-    const ctxOf = assignContexts(events);
+    const ctxOf = assignContexts(relEvents);
     const spansSorted = events.filter(isSpan).slice().sort((a, b) => a.start - b.start);
     const cameFrom = new Map<SpanEvent, string>();
     for (let i = 1; i < spansSorted.length; i++) {

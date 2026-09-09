@@ -47,7 +47,8 @@ export class DayBlock extends MarkdownRenderChild {
     el.empty();
     el.addClass("contexts-pane", "contexts-day-block");
     const s = this.plugin.settings;
-    const events = excludeFolders(applyRenames(healRenames(await this.plugin.getEvents())), s.excludedFolders);
+    // Day views show everything logged; exclusion only gates contexts and relatedness.
+    const events = applyRenames(healRenames(await this.plugin.getEvents()));
     const dayStart = this.resolveDayStart();
     const dayEnd = dayStart + 24 * 3600_000;
     const dayEvents = events.filter((ev) => ev.t >= dayStart && ev.t < dayEnd);

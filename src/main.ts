@@ -268,15 +268,16 @@ export default class ContextsPlugin extends Plugin {
   }
 
   async openContextModal(): Promise<void> {
-    const events = await this.getEvents();
-    const names = contextNames(events);
+    // Excluded files can't belong to contexts, so faces and seeds skip them.
+    const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
+    const names = contextNames(relEvents);
     new ContextModal(
       this.app,
       this,
       names,
-      currentContext(events),
-      contextFileSets(events),
-      this.contextSeeds(events, names)
+      currentContext(relEvents),
+      contextFileSets(relEvents),
+      this.contextSeeds(relEvents, names)
     ).open();
   }
 
@@ -376,10 +377,13 @@ export default class ContextsPlugin extends Plugin {
     );
   }
 
-  /** False when recording is paused or the path sits in an excluded folder. */
-  private tracked(path: string): boolean {
-    if (this.settings.paused) return false;
-    return !this.settings.excludedFolders.some((f) => path === f || path.startsWith(f + "/"));
+  /**
+   * False only while recording is paused. Excluded folders are still logged:
+   * exclusion is a read-time line that keeps their files out of contexts and
+   * relatedness while their own trail stays recorded and visible.
+   */
+  private tracked(_path: string): boolean {
+    return !this.settings.paused;
   }
 
   onunload() {
@@ -437,7 +441,7 @@ export default class ContextsPlugin extends Plugin {
     const iso = file.basename.match(/\d{4}-\d{2}-\d{2}/)?.[0];
     const d = iso ? new Date(`${iso}T00:00:00`) : new Date();
     const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const events = applyRenames(healRenames(await this.getEvents()));
     const body = dailyMarkdown(events, dayStart, dayStart + 24 * 3600_000, this.settings.sessionGapMin * 60_000);
     await this.app.vault.process(file, (content) => upsertDaySection(content, body));
     new Notice("Contexts: day summary inserted.");
@@ -660,7 +664,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const events = applyRenames(healRenames(await this.getEvents()));
     if (!events.length) {
       new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
       return;
@@ -674,7 +678,10 @@ export default class ContextsPlugin extends Plugin {
     const activePath = this.recorder.activePath;
     if (activePath) {
       const halfLife = this.settings.halfLifeDays * 24 * 3600_000;
-      const top = relatedTo(activePath, sessions, Date.now(), halfLife, undefined, contextFileSets(events)).slice(0, 10);
+      // Relations always compute over the excluded stream (dump shows the full one).
+      const relEvents = excludeFolders(events, this.settings.excludedFolders);
+      const relSessions = groupSessions(relEvents, this.settings.sessionGapMin * 60_000);
+      const top = relatedTo(activePath, relSessions, Date.now(), halfLife, undefined, contextFileSets(relEvents)).slice(0, 10);
       if (top.length) {
         related =
           `\nRelated to ${activePath}:\n` +

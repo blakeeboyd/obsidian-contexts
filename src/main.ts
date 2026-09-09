@@ -328,7 +328,22 @@ export default class ContextsPlugin extends Plugin {
    */
   private maybeOfferHomeContext(path: string, activatedAt: number): void {
     void (async () => {
-      const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+      const events = await this.getEvents();
+      // A manual declaration is FRESH until the user has worked in a
+      // different file after it: clicking back into the body of the same
+      // file (or reopening it) must never overturn what they just chose.
+      // Membership can't protect here — declare, click into the editor,
+      // and no span has ENDED under the new context yet, so the file
+      // "belongs" only to the old one (the 2026-09-09 one-second yank).
+      for (let i = events.length - 1; i >= 0; i--) {
+        const ev = events[i];
+        if ("type" in ev && ev.type === "context") {
+          if (ev.via !== "auto") return; // fresh manual declaration stands
+          break;
+        }
+        if (isSpan(ev) && ev.path !== path) break; // worked elsewhere since: normal rules
+      }
+      const relEvents = excludeFolders(applyRenames(healRenames(events)), this.settings.excludedFolders);
       const threads = fileContexts(relEvents, path);
       const home = threads[0];
       const ctx = currentContext(relEvents);

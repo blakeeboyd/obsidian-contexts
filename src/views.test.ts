@@ -18,6 +18,7 @@ import {
   guessContext,
   healRenames,
   knownLinks,
+  peekEvents,
   topFiles,
   isStint,
   mergeDeltas,
@@ -346,6 +347,33 @@ describe("guessContext", () => {
       span("B.md", 10 * MIN),
     ];
     expect(guessContext(events, 20 * MIN)).toBeNull();
+  });
+});
+
+describe("peeks", () => {
+  it("scores a peeked pair below a traversal, from either side", () => {
+    const peek: LogEvent = { t: 10 * MIN, type: "peek", path: "Target.md", from: "Source.md" };
+    const clicked: SpanEvent = { ...span("Clicked.md", 20 * MIN), from: "Source.md" };
+    const events: LogEvent[] = [span("Source.md", 0), peek, clicked];
+    const sessions = groupSessions(events);
+    const related = relatedTo("Source.md", sessions, 30 * MIN, undefined, undefined, undefined, peekEvents(events));
+    const peeked = related.find((r) => r.path === "Target.md")!;
+    const traversed = related.find((r) => r.path === "Clicked.md")!;
+    expect(peeked.score).toBeGreaterThan(0);
+    expect(traversed.score).toBeGreaterThan(peeked.score);
+    // And the audit view agrees.
+    const pairs = allRelationships(sessions, 30 * MIN, undefined, undefined, undefined, peekEvents(events));
+    expect(pairs.some((p) => p.a === "Source.md" && p.b === "Target.md" && p.score > 0)).toBe(true);
+  });
+
+  it("is dropped from relations when either side is excluded, and rename-resolves its path", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "peek", path: "Target.md", from: "secret/Diary.md" },
+      { t: MIN, type: "peek", path: "Old.md", from: "Source.md" },
+      { t: 2 * MIN, type: "rename", from: "Old.md", to: "New.md" },
+    ];
+    expect(peekEvents(excludeFolders(events, ["secret"])).map((p) => p.path)).toEqual(["Old.md"]);
+    expect(peekEvents(applyRenames(events)).map((p) => p.path)).toEqual(["Target.md", "New.md"]);
   });
 });
 

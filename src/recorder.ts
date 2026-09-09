@@ -333,6 +333,21 @@ export interface DeleteEvent {
   path: string;
 }
 
+/**
+ * A link followed with the eyes, not the feet: the user hover-previewed
+ * `path` from inside `from` without opening it. Semi-deliberate (previews
+ * need the mod key or an instant-preview setting), invisible to the static
+ * link graph, and unreconstructible later — so it's captured now. Graded
+ * below a real traversal in relatedness: the reader potentially read the
+ * file, but chose not to go.
+ */
+export interface PeekEvent {
+  t: number;
+  type: "peek";
+  path: string; // the previewed file
+  from: string; // the file the link sits in
+}
+
 export interface CreateEvent {
   t: number;
   type: "create";
@@ -441,7 +456,8 @@ export type LogEvent =
   | UnrelateEvent
   | RelateEvent
   | ContextEvent
-  | RelabelEvent;
+  | RelabelEvent
+  | PeekEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

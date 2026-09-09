@@ -21,6 +21,7 @@ import {
   guessContext,
   healRenames,
   isStint,
+  peekEvents,
   relatedTo,
   trailFor,
   unrelatedPairs,
@@ -230,7 +231,7 @@ export class ContextsPane extends ItemView {
       // Dismissed pairs leave the list outright (the user said "not related");
       // pairs below the evidence floor never enter it (relatedness is a
       // conclusion, not a default — same-session alone doesn't clear the bar).
-      const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(relEvents))
+      const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(relEvents), peekEvents(relEvents))
         .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
         .slice(0, RELATED_LIMIT);
       if (!related.length) {
@@ -327,6 +328,7 @@ export class ContextsPane extends ItemView {
           : ev.type === "delete" ? ["file-x", "deleted"]
           : ev.type === "extmod" ? ["bot", ev.by ? `edited by ${ev.by}` : "edited externally (AI, sync, script)"]
           : ev.type === "firstseen" ? ["eye", "first seen by Contexts"]
+          : ev.type === "peek" ? ["glasses", `previewed from ${ev.from.split("/").pop()?.replace(/\.md$/, "") ?? ev.from}`]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
         line.createSpan({ text: `${fmtTime(ev.t)} · ` });

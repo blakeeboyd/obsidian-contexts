@@ -45,6 +45,7 @@ import {
   excludeFolders,
   groupSessions,
   knownLinks,
+  peekEvents,
   derivedLabel,
   topFiles,
   healRenames,
@@ -62,6 +63,8 @@ const PLUGIN_WRITE_WINDOW_MS = 15_000;
 const IDLE_CHECK_MS = 60_000;
 // A link click older than this can't explain the current activation.
 const LINK_OPEN_WINDOW_MS = 3000;
+// One peek per link pair per window; re-hovering the same link is one read.
+const PEEK_COALESCE_MS = 60_000;
 
 export default class ContextsPlugin extends Plugin {
   settings: ContextsSettings = DEFAULT_SETTINGS;
@@ -86,6 +89,7 @@ export default class ContextsPlugin extends Plugin {
   // matching modify/create is attributed instead of logged anonymously.
   // Provenance: cwagner223355/obsidian-recent-edits.
   private pendingPluginWrite = new Map<string, { writer: string; t: number }>();
+  private lastPeek = new Map<string, number>();
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -111,6 +115,28 @@ export default class ContextsPlugin extends Plugin {
         if (typeof path === "string" && typeof writer === "string" && writer) {
           this.pendingPluginWrite.set(path, { writer, t: Date.now() });
         }
+      })
+    );
+
+    // A hover preview is a link followed with the eyes: log the peek,
+    // keyed to the previewed file with the source as its from.
+    const wsHover = this.app.workspace as unknown as {
+      on(name: "hover-link", cb: (data: { linktext?: unknown; sourcePath?: unknown }) => void): EventRef;
+    };
+    this.registerEvent(
+      wsHover.on("hover-link", (data) => {
+        if (!this.settings.capture.hovers) return;
+        const linktext = data?.linktext;
+        const sourcePath = data?.sourcePath;
+        if (typeof linktext !== "string" || !linktext || typeof sourcePath !== "string" || !sourcePath) return;
+        const dest = this.app.metadataCache.getFirstLinkpathDest(linktext.split("#")[0], sourcePath);
+        if (!dest || dest.extension !== "md" || dest.path === sourcePath) return;
+        if (!this.tracked(dest.path)) return;
+        const now = Date.now();
+        const key = `${sourcePath}\u0000${dest.path}`;
+        if (now - (this.lastPeek.get(key) ?? 0) < PEEK_COALESCE_MS) return;
+        this.lastPeek.set(key, now);
+        this.enqueue(() => this.record({ t: now, type: "peek", path: dest.path, from: sourcePath }));
       })
     );
 
@@ -660,7 +686,8 @@ export default class ContextsPlugin extends Plugin {
       Date.now(),
       this.settings.halfLifeDays * 24 * 3600_000,
       unrelatedPairs(events),
-      contextFileSets(events)
+      contextFileSets(events),
+      peekEvents(events)
     );
     new RelationshipsModal(this.app, this, pairs).open();
   }
@@ -683,7 +710,7 @@ export default class ContextsPlugin extends Plugin {
       // Relations always compute over the excluded stream (dump shows the full one).
       const relEvents = excludeFolders(events, this.settings.excludedFolders);
       const relSessions = groupSessions(relEvents, this.settings.sessionGapMin * 60_000);
-      const top = relatedTo(activePath, relSessions, Date.now(), halfLife, undefined, contextFileSets(relEvents)).slice(0, 10);
+      const top = relatedTo(activePath, relSessions, Date.now(), halfLife, undefined, contextFileSets(relEvents), peekEvents(relEvents)).slice(0, 10);
       if (top.length) {
         related =
           `\nRelated to ${activePath}:\n` +

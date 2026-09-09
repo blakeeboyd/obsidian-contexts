@@ -44,6 +44,7 @@ export interface CaptureSettings {
   math: boolean;
   tables: boolean;
   canvas: boolean;
+  hovers: boolean;
   formatting: boolean;
   frontmatter: boolean;
   ctime: boolean;
@@ -79,6 +80,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
     math: true,
     tables: true,
     canvas: true,
+    hovers: true,
     formatting: true,
     frontmatter: true,
     ctime: true,
@@ -110,6 +112,7 @@ const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
   math: ["Math", "Net change in LaTeX math regions."],
   tables: ["Tables", "Net change in table count."],
   canvas: ["Canvas files", "Activation spans for .canvas files (no content deltas)."],
+  hovers: ["Link previews", "Peeks: a link read through its hover popover without being opened."],
   formatting: ["Bold and italics", "Net change in bold and italic emphasis counts."],
   frontmatter: ["Frontmatter fields", "Which frontmatter keys changed, with their before and after values."],
   ctime: ["Creation time", "Stamp each span with the file's creation time, the anchor for healing renames made outside Obsidian."],

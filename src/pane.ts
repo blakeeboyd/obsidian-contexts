@@ -236,10 +236,11 @@ export class ContextsPane extends ItemView {
       contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
       const halfLife = s.halfLifeDays * 24 * 3600_000;
       const dismissed = unrelatedPairs(relEvents);
+      const ctxOfSpans = assignContexts(relEvents);
       // Dismissed pairs leave the list outright (the user said "not related");
       // pairs below the evidence floor never enter it (relatedness is a
       // conclusion, not a default — same-session alone doesn't clear the bar).
-      const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(relEvents), peekEvents(relEvents))
+      const related = relatedTo(path, sessions, Date.now(), halfLife, dismissed, contextFileSets(relEvents), peekEvents(relEvents), ctxOfSpans)
         .filter((r) => !r.dismissed && r.score >= MIN_RELATED_SCORE)
         .slice(0, RELATED_LIMIT);
       if (!related.length) {

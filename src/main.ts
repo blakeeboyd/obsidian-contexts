@@ -39,6 +39,7 @@ import {
   ContextSet,
   allRelationships,
   applyRenames,
+  assignContexts,
   contextFileSets,
   contextNames,
   currentContext,
@@ -815,7 +816,8 @@ export default class ContextsPlugin extends Plugin {
       this.settings.halfLifeDays * 24 * 3600_000,
       unrelatedPairs(events),
       contextFileSets(events),
-      peekEvents(events)
+      peekEvents(events),
+      assignContexts(events)
     );
     new RelationshipsModal(this.app, this, pairs).open();
   }
@@ -838,7 +840,7 @@ export default class ContextsPlugin extends Plugin {
       // Relations always compute over the excluded stream (dump shows the full one).
       const relEvents = excludeFolders(events, this.settings.excludedFolders);
       const relSessions = groupSessions(relEvents, this.settings.sessionGapMin * 60_000);
-      const top = relatedTo(activePath, relSessions, Date.now(), halfLife, undefined, contextFileSets(relEvents), peekEvents(relEvents)).slice(0, 10);
+      const top = relatedTo(activePath, relSessions, Date.now(), halfLife, undefined, contextFileSets(relEvents), peekEvents(relEvents), assignContexts(relEvents)).slice(0, 10);
       if (top.length) {
         related =
           `\nRelated to ${activePath}:\n` +

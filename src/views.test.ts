@@ -494,6 +494,38 @@ describe("relabeledDecls", () => {
   });
 });
 
+describe("context seams in relevance", () => {
+  it("a traversal across a context seam is recorded but not weighted; within one context it counts", () => {
+    const arrival: SpanEvent = { ...span("Dest.md", 10 * MIN), from: "Source.md" };
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Source.md", MIN),
+      { t: 9 * MIN, type: "context", name: "beta" },
+      arrival, // followed a link out of alpha into beta
+    ];
+    const sessions = groupSessions(events);
+    const ctxOf = assignContexts(events);
+    const sets = contextFileSets(events);
+    const cross = relatedTo("Dest.md", sessions, 20 * MIN, undefined, undefined, sets, undefined, ctxOf);
+    // No traversal bonus, no cross-seam adjacency: the pair scores nothing.
+    expect(cross.find((r) => r.path === "Source.md")?.score ?? 0).toBe(0);
+    // Same shape, no context change: the traversal counts.
+    const sameCtx: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Source.md", MIN),
+      { ...span("Dest.md", 10 * MIN), from: "Source.md" },
+    ];
+    const same = relatedTo("Dest.md", groupSessions(sameCtx), 20 * MIN, undefined, undefined, contextFileSets(sameCtx), undefined, assignContexts(sameCtx));
+    expect(same.find((r) => r.path === "Source.md")!.score).toBeGreaterThan(0);
+  });
+
+  it("unassigned spans keep pre-declaration behavior", () => {
+    const events: LogEvent[] = [span("A.md", 0), { ...span("B.md", 6 * MIN), from: "A.md" }];
+    const related = relatedTo("B.md", groupSessions(events), 20 * MIN, undefined, undefined, contextFileSets(events), undefined, assignContexts(events));
+    expect(related.find((r) => r.path === "A.md")!.score).toBeGreaterThan(0);
+  });
+});
+
 describe("covers", () => {
   it("a covering declaration claims the file's earlier spans in the sitting", () => {
     const events: LogEvent[] = [

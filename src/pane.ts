@@ -11,8 +11,10 @@ import {
   allRelationships,
   applyRenames,
   coalesceTrail,
+  assignContexts,
   contextFileSets,
   currentContext,
+  fileContexts,
   excludeFolders,
   fileInterest,
   groupSessions,
@@ -190,6 +192,15 @@ export class ContextsPane extends ItemView {
     const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
     contentEl.createDiv({ text: basename, cls: "contexts-title" });
 
+    // The threads this file belongs to: its context memberships, by engaged time.
+    const threads = fileContexts(events, path);
+    if (threads.length) {
+      contentEl.createDiv({
+        text: `threads: ${threads.map((th) => `${th.name} (${fmtDur(th.dur)})`).join(" · ")}`,
+        cls: "contexts-row-meta",
+      });
+    }
+
     // Related now: the co-activation ranking for this file.
     contentEl.createDiv({ text: "Related now", cls: "contexts-section" });
     const halfLife = s.halfLifeDays * 24 * 3600_000;
@@ -219,6 +230,7 @@ export class ContextsPane extends ItemView {
     contentEl.createDiv({ text: "Trail", cls: "contexts-section" });
     // Every visit came from somewhere: join each span to the previous active
     // file (same session), so arrivals show even without a link click.
+    const ctxOf = assignContexts(events);
     const spansSorted = events.filter(isSpan).slice().sort((a, b) => a.start - b.start);
     const cameFrom = new Map<SpanEvent, string>();
     for (let i = 1; i < spansSorted.length; i++) {
@@ -236,7 +248,8 @@ export class ContextsPane extends ItemView {
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
-        row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}` });
+        const stintCtx = ctxOf.get(ev.spans[0]);
+        row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}` });
         if (ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // Click to expand: every visit, chronological — time, length, what changed then.
         const details = row.createDiv({ cls: "contexts-trail-details" });

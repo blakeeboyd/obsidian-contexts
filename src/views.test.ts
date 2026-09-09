@@ -11,6 +11,7 @@ import {
   contextNames,
   currentContext,
   excludeFolders,
+  fileContexts,
   fileInterest,
   groupSessions,
   guessContext,
@@ -300,6 +301,21 @@ describe("declared contexts", () => {
     ];
     const out = excludeFolders(applyRenames(events), ["secret"]);
     expect(out[0]).toMatchObject({ type: "context", name: "alpha" });
+  });
+});
+
+describe("fileContexts", () => {
+  it("lists every thread a file was visited under, weighted by engaged time", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Bridge.md", MIN),
+      { t: 20 * MIN, type: "context", name: "beta" },
+      span("Bridge.md", 30 * MIN),
+      span("Bridge.md", 40 * MIN),
+    ];
+    const threads = fileContexts(events, "Bridge.md");
+    expect(threads.map((th) => th.name)).toEqual(["beta", "alpha"]); // beta has more engaged time
+    expect(threads).toHaveLength(2);
   });
 });
 

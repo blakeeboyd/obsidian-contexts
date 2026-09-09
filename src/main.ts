@@ -313,36 +313,52 @@ export default class ContextsPlugin extends Plugin {
   }
 
   /** Declare (or clear, with "") the current context — a logged event like everything else. */
-  declareContext(name: string, via?: "guess"): void {
+  declareContext(name: string, via?: "guess" | "auto", quiet = false): void {
     const ev: LogEvent = { t: Date.now(), type: "context", name };
     if (via) ev.via = via;
     this.enqueue(() => this.record(ev));
-    new Notice(name ? `Context: ${name}` : "Context cleared");
+    if (!quiet) new Notice(name ? `Context: ${name}` : "Context cleared");
   }
 
   /**
-   * A file remembers where it lives: on opening one whose home context
-   * differs from the declaration, offer the switch as a toast — recognition,
-   * never automation (borrowing a file into the current context is the other
-   * legitimate reading, and only the user knows which this is). Throttled per
-   * (file, home) so ignoring it stays free.
+   * A file remembers where it lives: opening one whose home context differs
+   * from the declaration ENTERS that context automatically — the toast
+   * informs, and Undo is the one-click correction (both directions are
+   * calibration data). The exception is an explicit no-context: a declared
+   * nothing stands, so the toast only OFFERS the switch there. The
+   * declaration is backdated to the activation instant so the triggering
+   * span itself joins the home context.
    */
-  private maybeOfferHomeContext(path: string): void {
+  private maybeOfferHomeContext(path: string, activatedAt: number): void {
     void (async () => {
       const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
       const home = fileContexts(relEvents, path)[0];
-      if (!home || home.name === currentContext(relEvents)) return;
-      const now = Date.now();
-      const key = `${path}\u0000${home.name}`;
-      if (now - (this.lastHomeNudge.get(key) ?? 0) < HOME_NUDGE_COOLDOWN_MS) return;
-      this.lastHomeNudge.set(key, now);
-      const frag = document.createDocumentFragment();
-      frag.append(`This file lives in ${home.name}. `);
-      const link = document.createElement("a");
-      link.textContent = "Switch";
-      link.addEventListener("click", () => this.declareContext(home.name, "guess"));
-      frag.append(link);
-      new Notice(frag, 8000);
+      if (!home) return;
+      const ctx = currentContext(relEvents);
+      if (home.name === ctx) return;
+      if (ctx) {
+        const ev: LogEvent = { t: activatedAt, type: "context", name: home.name, via: "auto" };
+        this.enqueue(() => this.record(ev));
+        const frag = document.createDocumentFragment();
+        frag.append(`Context: ${home.name} (this file's home). `);
+        const link = document.createElement("a");
+        link.textContent = "Undo";
+        link.addEventListener("click", () => this.declareContext(ctx));
+        frag.append(link);
+        new Notice(frag, 6000);
+      } else {
+        const now = Date.now();
+        const key = `${path}\u0000${home.name}`;
+        if (now - (this.lastHomeNudge.get(key) ?? 0) < HOME_NUDGE_COOLDOWN_MS) return;
+        this.lastHomeNudge.set(key, now);
+        const frag = document.createDocumentFragment();
+        frag.append(`This file lives in ${home.name}. `);
+        const link = document.createElement("a");
+        link.textContent = "Switch";
+        link.addEventListener("click", () => this.declareContext(home.name, "guess"));
+        frag.append(link);
+        new Notice(frag, 8000);
+      }
     })();
   }
 
@@ -633,8 +649,9 @@ export default class ContextsPlugin extends Plugin {
       const snap = file.extension === "md" ? await this.snapshot(file, false) : emptySnapshot();
       await this.ensureBaseline(file, snap);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
-      this.recorder.activate(file.path, snap, Date.now(), ctime, this.consumeOpened(file.path));
-      this.maybeOfferHomeContext(file.path);
+      const activatedAt = Date.now();
+      this.recorder.activate(file.path, snap, activatedAt, ctime, this.consumeOpened(file.path));
+      this.maybeOfferHomeContext(file.path, activatedAt);
     }
     this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
   }

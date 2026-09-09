@@ -429,8 +429,13 @@ export interface ContextEvent {
   t: number;
   type: "context";
   name: string;
-  /** "guess" = the user confirmed the plugin's suggestion rather than declaring unprompted — calibration data for the guessing loop. */
-  via?: "guess";
+  /**
+   * "guess" = the user confirmed the plugin's suggestion; "auto" = the plugin
+   * switched on its own (opening a file enters its home context) and the user
+   * was informed. Both are calibration data — an undo right after an "auto"
+   * is the negative signal.
+   */
+  via?: "guess" | "auto";
 }
 
 /**

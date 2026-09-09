@@ -66,8 +66,6 @@ const IDLE_CHECK_MS = 60_000;
 const LINK_OPEN_WINDOW_MS = 3000;
 // One peek per link pair per window; re-hovering the same link is one read.
 const PEEK_COALESCE_MS = 60_000;
-// Don't re-nudge about the same file's home context while the user keeps ignoring it.
-const HOME_NUDGE_COOLDOWN_MS = 15 * 60_000;
 
 export default class ContextsPlugin extends Plugin {
   settings: ContextsSettings = DEFAULT_SETTINGS;
@@ -93,7 +91,6 @@ export default class ContextsPlugin extends Plugin {
   // Provenance: cwagner223355/obsidian-recent-edits.
   private pendingPluginWrite = new Map<string, { writer: string; t: number }>();
   private lastPeek = new Map<string, number>();
-  private lastHomeNudge = new Map<string, number>();
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -322,12 +319,11 @@ export default class ContextsPlugin extends Plugin {
 
   /**
    * A file remembers where it lives: opening one whose home context differs
-   * from the declaration ENTERS that context automatically — the toast
-   * informs, and Undo is the one-click correction (both directions are
-   * calibration data). The exception is an explicit no-context: a declared
-   * nothing stands, so the toast only OFFERS the switch there. The
-   * declaration is backdated to the activation instant so the triggering
-   * span itself joins the home context.
+   * from the current state ENTERS that context — even from an explicit
+   * no-context (the clear governs what CONTEXTLESS files do, not homed
+   * ones). The toast informs; Undo restores what was before, including the
+   * cleared state. Backdated to the activation instant so the triggering
+   * span joins the home context; via:"auto" marks it for calibration.
    */
   private maybeOfferHomeContext(path: string, activatedAt: number): void {
     void (async () => {
@@ -336,29 +332,15 @@ export default class ContextsPlugin extends Plugin {
       if (!home) return;
       const ctx = currentContext(relEvents);
       if (home.name === ctx) return;
-      if (ctx) {
-        const ev: LogEvent = { t: activatedAt, type: "context", name: home.name, via: "auto" };
-        this.enqueue(() => this.record(ev));
-        const frag = document.createDocumentFragment();
-        frag.append(`Context: ${home.name} (this file's home). `);
-        const link = document.createElement("a");
-        link.textContent = "Undo";
-        link.addEventListener("click", () => this.declareContext(ctx));
-        frag.append(link);
-        new Notice(frag, 6000);
-      } else {
-        const now = Date.now();
-        const key = `${path}\u0000${home.name}`;
-        if (now - (this.lastHomeNudge.get(key) ?? 0) < HOME_NUDGE_COOLDOWN_MS) return;
-        this.lastHomeNudge.set(key, now);
-        const frag = document.createDocumentFragment();
-        frag.append(`This file lives in ${home.name}. `);
-        const link = document.createElement("a");
-        link.textContent = "Switch";
-        link.addEventListener("click", () => this.declareContext(home.name, "guess"));
-        frag.append(link);
-        new Notice(frag, 8000);
-      }
+      const ev: LogEvent = { t: activatedAt, type: "context", name: home.name, via: "auto" };
+      this.enqueue(() => this.record(ev));
+      const frag = document.createDocumentFragment();
+      frag.append(`Context: ${home.name} (this file's home). `);
+      const link = document.createElement("a");
+      link.textContent = "Undo";
+      link.addEventListener("click", () => this.declareContext(ctx ?? ""));
+      frag.append(link);
+      new Notice(frag, 6000);
     })();
   }
 

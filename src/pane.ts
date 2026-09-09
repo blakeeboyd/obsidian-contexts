@@ -204,21 +204,6 @@ export class ContextsPane extends ItemView {
       guessLine.addEventListener("click", () => this.plugin.declareContext(guess.name, "guess"));
     }
 
-    // A file remembers where it lives: opening one whose home context differs
-    // from the declaration is likelier a switch than a borrowing — but only
-    // the user knows which, so this is recognition, never automation. One
-    // click declares (logged as a confirmed guess); ignoring costs nothing.
-    if (path && !excludedBy) {
-      const home = fileContexts(relEvents, path)[0];
-      if (home && home.name !== ctx && home.name !== guess?.name && !evicted.has(home.name)) {
-        const homeLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
-        setIcon(homeLine.createSpan({ cls: "contexts-chip-icon" }), "home");
-        homeLine.createSpan({ text: `This file lives in ${home.name}. Switch?` });
-        homeLine.setAttribute("title", "Click to enter this file's home context");
-        homeLine.addEventListener("click", () => this.plugin.declareContext(home.name, "guess"));
-      }
-    }
-
     if (!path) {
       this.renderActiveFiles(contentEl, events);
       this.renderSessions(contentEl, groupSessions(events, s.sessionGapMin * 60_000));
@@ -296,7 +281,11 @@ export class ContextsPane extends ItemView {
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";
         const stintCtx = ctxOf.get(ev.spans[0]);
-        row.createDiv({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}` });
+        // Icons in the scan layer, words in the read layer: a pencil stint
+        // changed the file, a book stint only read it.
+        const line = row.createDiv({ cls: "contexts-event-line" });
+        setIcon(line.createSpan({ cls: "contexts-chip-icon" }), ev.edit ? "pencil" : "book-open");
+        line.createSpan({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}` });
         if (ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // Click to expand: every visit, chronological — time, length, what changed then.
         const details = row.createDiv({ cls: "contexts-trail-details" });

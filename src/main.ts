@@ -45,6 +45,7 @@ import {
   evictedFrom,
   fileContexts,
   excludeFolders,
+  fileRunStart,
   groupSessions,
   knownLinks,
   peekEvents,
@@ -92,6 +93,8 @@ export default class ContextsPlugin extends Plugin {
   // Provenance: cwagner223355/obsidian-recent-edits.
   private pendingPluginWrite = new Map<string, { writer: string; t: number }>();
   private lastPeek = new Map<string, number>();
+  // When the current file activated (the open span's start), for covers.
+  private lastActivationAt: number | null = null;
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -310,10 +313,25 @@ export default class ContextsPlugin extends Plugin {
     });
   }
 
-  /** Declare (or clear, with "") the current context — a logged event like everything else. */
+  /**
+   * Declare (or clear, with "") the current context — a logged event like
+   * everything else. A manual declaration made while a file is open covers
+   * back to that file's opening in this sitting (Blake's rule), so the file
+   * carries no residue of the context it was merely born under.
+   */
   declareContext(name: string, via?: "guess" | "auto", quiet = false): void {
-    const ev: LogEvent = { t: Date.now(), type: "context", name };
+    const now = Date.now();
+    const ev: LogEvent = { t: now, type: "context", name };
     if (via) ev.via = via;
+    if (via !== "auto") {
+      const path = this.recorder.activePath ?? this.lastActiveMdPath;
+      if (path) {
+        const runStart = fileRunStart(applyRenames(this.events ?? []), path, this.settings.sessionGapMin * 60_000, now);
+        const openSpan = this.recorder.activePath === path ? this.lastActivationAt : null;
+        const covers = Math.min(runStart ?? Infinity, openSpan ?? Infinity);
+        if (covers < now) ev.covers = covers;
+      }
+    }
     this.enqueue(() => this.record(ev));
     if (!quiet) new Notice(name ? `Context: ${name}` : "Context cleared");
   }
@@ -669,6 +687,7 @@ export default class ContextsPlugin extends Plugin {
       await this.ensureBaseline(file, snap);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       const activatedAt = Date.now();
+      this.lastActivationAt = activatedAt;
       this.recorder.activate(file.path, snap, activatedAt, ctime, this.consumeOpened(file.path));
       this.maybeOfferHomeContext(file.path, activatedAt);
     }

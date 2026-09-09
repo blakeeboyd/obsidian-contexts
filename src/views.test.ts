@@ -12,6 +12,7 @@ import {
   currentContext,
   excludeFolders,
   fileContexts,
+  fileRunStart,
   fileInterest,
   groupSessions,
   derivedLabel,
@@ -490,6 +491,33 @@ describe("relabeledDecls", () => {
     ];
     expect(currentContext(events)).toBe("alpha");
     expect(contextNames(events)).toEqual(["alpha"]);
+  });
+});
+
+describe("covers", () => {
+  it("a covering declaration claims the file's earlier spans in the sitting", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Other.md", MIN), // ends 6min, before coverage: stays alpha
+      span("New.md", 10 * MIN), // ends 15min: claimed by coverage
+      { t: 30 * MIN, type: "context", name: "beta", covers: 9 * MIN },
+    ];
+    const assigned = assignContexts(events);
+    const byPath = (p: string) => [...assigned.entries()].filter(([sp]) => sp.path === p).map(([, n]) => n);
+    expect(byPath("New.md")).toEqual(["beta"]);
+    expect(byPath("Other.md")).toEqual(["alpha"]);
+    expect(currentContext(events)).toBe("beta");
+  });
+
+  it("fileRunStart finds the file's first span in the trailing sitting and stops at the gap", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0), // old sitting
+      span("A.md", 120 * MIN), // new sitting starts
+      span("B.md", 126 * MIN),
+      span("A.md", 132 * MIN),
+    ];
+    expect(fileRunStart(events, "A.md", 30 * MIN, 140 * MIN)).toBe(120 * MIN);
+    expect(fileRunStart(events, "C.md", 30 * MIN, 140 * MIN)).toBeUndefined();
   });
 });
 

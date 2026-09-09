@@ -436,6 +436,15 @@ export interface ContextEvent {
    * is the negative signal.
    */
   via?: "guess" | "auto";
+  /**
+   * Assignment-effective start: this declaration also claims everything from
+   * `covers` onward (a manual declaration made while a file is active covers
+   * back to that file's opening — Blake's rule: "if a file is opened and
+   * then the context is changed, events from the open to that moment shift
+   * to the new context"). Only assignment reads it; currentContext goes by
+   * t, so backdated coverage never un-declares something declared later.
+   */
+  covers?: number;
 }
 
 /**

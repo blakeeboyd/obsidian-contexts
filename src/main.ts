@@ -246,6 +246,21 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "flush-span",
+      name: "Flush current stint to the log",
+      // Deterministic capture point: close the open span, write it, reopen.
+      // The reopened span coalesces with the closed one at display grain, so
+      // views don't show a seam. Run before plugin reloads (onunload's close
+      // is fire-and-forget) or anything else that might eat the open span.
+      callback: () => {
+        this.enqueue(async () => {
+          await this.closeSpan();
+          await this.onActiveChange();
+        });
+      },
+    });
+
+    this.addCommand({
       id: "toggle-pause",
       name: "Pause/resume recording",
       callback: () => {

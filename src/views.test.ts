@@ -14,9 +14,11 @@ import {
   fileContexts,
   fileInterest,
   groupSessions,
+  derivedLabel,
   guessContext,
   healRenames,
   knownLinks,
+  topFiles,
   isStint,
   mergeDeltas,
   pairKey,
@@ -344,6 +346,23 @@ describe("guessContext", () => {
       span("B.md", 10 * MIN),
     ];
     expect(guessContext(events, 20 * MIN)).toBeNull();
+  });
+});
+
+describe("derivedLabel", () => {
+  it("names a context by its most-engaged files and drifts as engagement shifts", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      span("notes/Minor.md", MIN, 2 * MIN),
+      span("plans/Big Plan.md", 10 * MIN, 20 * MIN),
+      span("notes/Also Big.md", 40 * MIN, 15 * MIN),
+    ];
+    const set = contextFileSets(events).get("context 1")!;
+    expect(derivedLabel(set)).toBe("Big Plan + Also Big");
+    expect(topFiles(set)).toEqual(["plans/Big Plan.md", "notes/Also Big.md", "notes/Minor.md"]);
+    // More engagement in another file reorders the label: the name is derived, never frozen.
+    const more = [...events, span("notes/Minor.md", 70 * MIN, 40 * MIN)];
+    expect(derivedLabel(contextFileSets(more).get("context 1")!)).toBe("Minor + Big Plan");
   });
 });
 

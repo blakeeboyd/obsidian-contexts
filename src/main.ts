@@ -35,6 +35,8 @@ import {
 } from "./recorder";
 import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settings";
 import {
+  ANON_CONTEXT_RE,
+  ContextSet,
   allRelationships,
   applyRenames,
   contextFileSets,
@@ -43,6 +45,8 @@ import {
   excludeFolders,
   groupSessions,
   knownLinks,
+  derivedLabel,
+  topFiles,
   healRenames,
   relatedTo,
   unrelatedPairs,
@@ -687,7 +691,7 @@ const NEW_CONTEXT = "+ new context";
 function nextContextIndex(names: string[]): number {
   let max = 0;
   for (const n of names) {
-    const m = n.match(/^context (\d+)$/);
+    const m = ANON_CONTEXT_RE.exec(n);
     if (m) max = Math.max(max, parseInt(m[1], 10));
   }
   return max + 1;
@@ -704,7 +708,7 @@ class ContextModal extends FuzzySuggestModal<string> {
     private plugin: ContextsPlugin,
     private names: string[],
     private current: string | null,
-    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>
+    private ctxSets: Map<string, ContextSet>
   ) {
     super(app);
     this.setPlaceholder(this.current ? `Context: ${this.current} — switch to…` : "Declare a context…");
@@ -736,21 +740,34 @@ class ContextModal extends FuzzySuggestModal<string> {
   }
 }
 
-/** A context row: its name and its face (the files that define it). */
+// How much of a context's face shows in a modal row.
+const FACE_FILES = 5;
+
+/**
+ * A context row: its name, a derived label for anonymous contexts (the
+ * evolving stand-in for a real name, recomputed from the cluster every
+ * render), and its face — the files that define it, most-engaged first.
+ */
 function renderContextRow(
   el: HTMLElement,
   name: string,
-  ctxSets: Map<string, { files: Set<string>; lastAt: number }>
+  ctxSets: Map<string, ContextSet>
 ): void {
-  el.createDiv({ text: name });
-  const files = ctxSets.get(name)?.files;
-  if (files?.size) {
-    const face = [...files]
-      .slice(0, 3)
+  const set = ctxSets.get(name);
+  const title = el.createDiv();
+  title.createSpan({ text: name });
+  if (set && ANON_CONTEXT_RE.test(name)) {
+    const label = derivedLabel(set);
+    if (label) title.createSpan({ text: ` · ${label}`, cls: "contexts-derived-label" });
+  }
+  if (set?.files.size) {
+    const ranked = topFiles(set);
+    const face = ranked
+      .slice(0, FACE_FILES)
       .map((p) => p.split("/").pop()?.replace(/\.md$/, "") ?? p)
       .join(", ");
     el.createDiv({
-      text: files.size > 3 ? `${face} +${files.size - 3}` : face,
+      text: ranked.length > FACE_FILES ? `${face} +${ranked.length - FACE_FILES}` : face,
       cls: "contexts-row-meta",
     });
   }
@@ -762,7 +779,7 @@ class RenameContextModal extends FuzzySuggestModal<string> {
     app: App,
     private plugin: ContextsPlugin,
     private names: string[],
-    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>
+    private ctxSets: Map<string, ContextSet>
   ) {
     super(app);
     this.setPlaceholder("Rename which context?");
@@ -781,7 +798,12 @@ class RenameContextModal extends FuzzySuggestModal<string> {
   }
 
   onChooseItem(item: string): void {
-    new NameModal(this.app, `Rename "${item}" to:`, item, (to) => this.plugin.relabelContext(item, to)).open();
+    // Renaming an anonymous context starts from the derived label: one Enter
+    // adopts the suggestion, and adopting pins it (the drift stops with the
+    // anonymous name it decorated).
+    const set = this.ctxSets.get(item);
+    const suggestion = set && ANON_CONTEXT_RE.test(item) ? derivedLabel(set) : "";
+    new NameModal(this.app, `Rename "${item}" to:`, suggestion || item, (to) => this.plugin.relabelContext(item, to)).open();
   }
 }
 

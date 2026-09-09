@@ -14,6 +14,7 @@ import {
   assignContexts,
   contextFileSets,
   currentContext,
+  evictedFrom,
   fileContexts,
   excludeFolders,
   fileInterest,
@@ -177,10 +178,17 @@ export class ContextsPane extends ItemView {
     // context BY BEING excluded, so the line says so instead of implying the
     // current declaration covers it.
     const ctx = currentContext(relEvents);
+    // An evicted file under the declared context reads as a contradiction
+    // without the parenthetical: the declaration stands, the file is out.
+    const evicted = path ? evictedFrom(relEvents, path) : new Set<string>();
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
     setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
     ctxLine.createSpan({
-      text: excludedBy ? "No context: excluded file" : ctx ? `Context: ${ctx}` : "No context declared",
+      text: excludedBy
+        ? "No context: excluded file"
+        : ctx
+        ? `Context: ${ctx}${evicted.has(ctx) ? " (this file removed)" : ""}`
+        : "No context declared",
     });
     ctxLine.setAttribute("title", "Click to declare or switch context");
     ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
@@ -194,6 +202,21 @@ export class ContextsPane extends ItemView {
       guessLine.createSpan({ text: `Working in ${guess.name}?` });
       guessLine.setAttribute("title", "Click to confirm the guessed context");
       guessLine.addEventListener("click", () => this.plugin.declareContext(guess.name, "guess"));
+    }
+
+    // A file remembers where it lives: opening one whose home context differs
+    // from the declaration is likelier a switch than a borrowing — but only
+    // the user knows which, so this is recognition, never automation. One
+    // click declares (logged as a confirmed guess); ignoring costs nothing.
+    if (path && !excludedBy) {
+      const home = fileContexts(relEvents, path)[0];
+      if (home && home.name !== ctx && home.name !== guess?.name && !evicted.has(home.name)) {
+        const homeLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
+        setIcon(homeLine.createSpan({ cls: "contexts-chip-icon" }), "home");
+        homeLine.createSpan({ text: `This file lives in ${home.name}. Switch?` });
+        homeLine.setAttribute("title", "Click to enter this file's home context");
+        homeLine.addEventListener("click", () => this.plugin.declareContext(home.name, "guess"));
+      }
     }
 
     if (!path) {

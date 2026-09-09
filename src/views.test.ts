@@ -283,7 +283,7 @@ describe("declared contexts", () => {
     expect(contextNames(events)).toEqual(["teaching", "degree-design"]);
   });
 
-  it("assigns spans to the context declared at their start", () => {
+  it("assigns spans to the context declared as of their end", () => {
     const events: LogEvent[] = [
       span("Before.md", 0),
       { t: 10 * MIN, type: "context", name: "alpha" },
@@ -295,6 +295,20 @@ describe("declared contexts", () => {
     expect(assigned.get(events[0] as SpanEvent)).toBeUndefined();
     expect(assigned.get(events[2] as SpanEvent)).toBe("alpha");
     expect(assigned.get(events[4] as SpanEvent)).toBeUndefined();
+  });
+
+  it("a mid-span declaration moves the sitting into the new context", () => {
+    // "I put this file into context 2": the declaration lands while the span
+    // is open, so the span (which ENDS after it) must credit the new context —
+    // start-anchored assignment sent it to the old one and the move never took.
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      { t: 12 * MIN, type: "context", name: "context 2" },
+      span("Meeting.md", 10 * MIN), // start 10m (under 1), end 15m (under 2)
+    ];
+    const assigned = assignContexts(events);
+    expect(assigned.get(events[2] as SpanEvent)).toBe("context 2");
+    expect(fileContexts(events, "Meeting.md").map((c) => c.name)).toEqual(["context 2"]);
   });
 
   it("passes context events through renames and folder exclusion untouched", () => {

@@ -329,8 +329,15 @@ export default class ContextsPlugin extends Plugin {
   private maybeOfferHomeContext(path: string, activatedAt: number): void {
     void (async () => {
       const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
-      const home = fileContexts(relEvents, path)[0];
+      const threads = fileContexts(relEvents, path);
+      const home = threads[0];
       const ctx = currentContext(relEvents);
+      // Already among the file's contexts: the user's declared position
+      // stands. Auto-switch exists to enter a file's world when you're
+      // OUTSIDE it — yanking to the engaged-time winner while you're in
+      // another context the file also lives in fought every deliberate
+      // "I moved this file to context 2" (2026-09-09).
+      if (ctx && threads.some((c) => c.name === ctx)) return;
       if (!home) {
         // The symmetric case: a file the user declared OUT of the current
         // context, with no home elsewhere. Opening it means entering the

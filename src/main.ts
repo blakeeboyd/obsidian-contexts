@@ -66,6 +66,8 @@ const IDLE_CHECK_MS = 60_000;
 const LINK_OPEN_WINDOW_MS = 3000;
 // One peek per link pair per window; re-hovering the same link is one read.
 const PEEK_COALESCE_MS = 60_000;
+// Don't re-nudge about the same file's home context while the user keeps ignoring it.
+const HOME_NUDGE_COOLDOWN_MS = 15 * 60_000;
 
 export default class ContextsPlugin extends Plugin {
   settings: ContextsSettings = DEFAULT_SETTINGS;
@@ -91,6 +93,7 @@ export default class ContextsPlugin extends Plugin {
   // Provenance: cwagner223355/obsidian-recent-edits.
   private pendingPluginWrite = new Map<string, { writer: string; t: number }>();
   private lastPeek = new Map<string, number>();
+  private lastHomeNudge = new Map<string, number>();
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -315,6 +318,32 @@ export default class ContextsPlugin extends Plugin {
     if (via) ev.via = via;
     this.enqueue(() => this.record(ev));
     new Notice(name ? `Context: ${name}` : "Context cleared");
+  }
+
+  /**
+   * A file remembers where it lives: on opening one whose home context
+   * differs from the declaration, offer the switch as a toast — recognition,
+   * never automation (borrowing a file into the current context is the other
+   * legitimate reading, and only the user knows which this is). Throttled per
+   * (file, home) so ignoring it stays free.
+   */
+  private maybeOfferHomeContext(path: string): void {
+    void (async () => {
+      const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+      const home = fileContexts(relEvents, path)[0];
+      if (!home || home.name === currentContext(relEvents)) return;
+      const now = Date.now();
+      const key = `${path}\u0000${home.name}`;
+      if (now - (this.lastHomeNudge.get(key) ?? 0) < HOME_NUDGE_COOLDOWN_MS) return;
+      this.lastHomeNudge.set(key, now);
+      const frag = document.createDocumentFragment();
+      frag.append(`This file lives in ${home.name}. `);
+      const link = document.createElement("a");
+      link.textContent = "Switch";
+      link.addEventListener("click", () => this.declareContext(home.name, "guess"));
+      frag.append(link);
+      new Notice(frag, 8000);
+    })();
   }
 
   /** The user's judgment that a file does not belong to a context: a logged evict event, honored at read time for all of the file's spans there. */
@@ -605,6 +634,7 @@ export default class ContextsPlugin extends Plugin {
       await this.ensureBaseline(file, snap);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime, this.consumeOpened(file.path));
+      this.maybeOfferHomeContext(file.path);
     }
     this.refreshPane(); // also on file-less changes, so closing the last note updates the pane
   }

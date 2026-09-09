@@ -42,6 +42,7 @@ import {
   contextFileSets,
   contextNames,
   currentContext,
+  evictedFrom,
   fileContexts,
   excludeFolders,
   groupSessions,
@@ -329,19 +330,33 @@ export default class ContextsPlugin extends Plugin {
     void (async () => {
       const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
       const home = fileContexts(relEvents, path)[0];
-      if (!home) return;
       const ctx = currentContext(relEvents);
+      if (!home) {
+        // The symmetric case: a file the user declared OUT of the current
+        // context, with no home elsewhere. Opening it means entering the
+        // nothing it lives in — move to no-context, same toast, same Undo.
+        if (!ctx || !evictedFrom(relEvents, path).has(ctx)) return;
+        const ev: LogEvent = { t: activatedAt, type: "context", name: "", via: "auto" };
+        this.enqueue(() => this.record(ev));
+        this.switchToast(`No context (this file was removed from ${ctx}). `, ctx);
+        return;
+      }
       if (home.name === ctx) return;
       const ev: LogEvent = { t: activatedAt, type: "context", name: home.name, via: "auto" };
       this.enqueue(() => this.record(ev));
-      const frag = document.createDocumentFragment();
-      frag.append(`Context: ${home.name} (this file's home). `);
-      const link = document.createElement("a");
-      link.textContent = "Undo";
-      link.addEventListener("click", () => this.declareContext(ctx ?? ""));
-      frag.append(link);
-      new Notice(frag, 6000);
+      this.switchToast(`Context: ${home.name} (this file's home). `, ctx ?? "");
     })();
+  }
+
+  /** The informing toast for an automatic context move: text plus a one-click Undo restoring the prior state. */
+  private switchToast(text: string, restoreTo: string): void {
+    const frag = document.createDocumentFragment();
+    frag.append(text);
+    const link = document.createElement("a");
+    link.textContent = "Undo";
+    link.addEventListener("click", () => this.declareContext(restoreTo));
+    frag.append(link);
+    new Notice(frag, 6000);
   }
 
   /** The user's judgment that a file does not belong to a context: a logged evict event, honored at read time for all of the file's spans there. */

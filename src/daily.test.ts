@@ -21,6 +21,20 @@ describe("dailyMarkdown", () => {
     expect(md).toContain("[[journal/day]] edited externally");
   });
 
+  it("attributes announced plugin writes and keeps mixed writers anonymous", () => {
+    const events: LogEvent[] = [
+      span("Note.md", 10 * MIN),
+      { t: 20 * MIN, type: "extmod", path: "ai/report.md", by: "vault-mcp" },
+      { t: 22 * MIN, type: "extmod", path: "sync/other.md", by: "vault-mcp" },
+      { t: 40 * MIN, type: "extmod", path: "sync/other.md" }, // second write anonymous: attribution dropped
+      { t: 50 * MIN, type: "create", path: "ai/new.md", by: "vault-mcp" },
+    ];
+    const md = dailyMarkdown(events, 0, 24 * 3600_000, 30 * MIN);
+    expect(md).toContain("[[ai/report]] edited by vault-mcp");
+    expect(md).toContain("[[sync/other]] edited externally ×2");
+    expect(md).toContain("created [[ai/new]] (by vault-mcp)");
+  });
+
   it("says so when the day is empty", () => {
     expect(dailyMarkdown([], 0, 1000, 30 * MIN)).toContain("Nothing recorded");
   });

@@ -30,9 +30,16 @@ export function dailyMarkdown(events: LogEvent[], dayStart: number, dayEnd: numb
     }
     lines.push("");
   }
-  const extmods = new Map<string, number>();
+  // Attribution kept when every extmod for the path agrees on the writer.
+  const extmods = new Map<string, { n: number; by?: string }>();
   for (const ev of dayEvents) {
-    if ("type" in ev && ev.type === "extmod") extmods.set(ev.path, (extmods.get(ev.path) ?? 0) + 1);
+    if (!("type" in ev) || ev.type !== "extmod") continue;
+    const e = extmods.get(ev.path);
+    if (!e) extmods.set(ev.path, { n: 1, by: ev.by });
+    else {
+      e.n++;
+      if (e.by !== ev.by) e.by = undefined;
+    }
   }
   // Full history for the relabel mapping, then this day's declarations.
   const switches = relabeledDecls(events).filter((ev) => ev.t >= dayStart && ev.t < dayEnd);
@@ -42,8 +49,12 @@ export function dailyMarkdown(events: LogEvent[], dayStart: number, dayEnd: numb
   if (switches.length) lines.push("");
   const created = dayEvents.filter((ev) => "type" in ev && ev.type === "create");
   if (created.length || extmods.size) {
-    for (const ev of created) if ("path" in ev) lines.push(`- created ${wikilink(ev.path)}`);
-    for (const [p, n] of extmods) lines.push(`- ${wikilink(p)} edited externally${n > 1 ? ` ×${n}` : ""}`);
+    for (const ev of created) {
+      if ("path" in ev) lines.push(`- created ${wikilink(ev.path)}${"by" in ev && ev.by ? ` (by ${ev.by})` : ""}`);
+    }
+    for (const [p, { n, by }] of extmods) {
+      lines.push(`- ${wikilink(p)} edited ${by ? `by ${by}` : "externally"}${n > 1 ? ` ×${n}` : ""}`);
+    }
     lines.push("");
   }
   return lines.join("\n").trimEnd();

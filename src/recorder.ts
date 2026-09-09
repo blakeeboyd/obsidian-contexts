@@ -337,6 +337,8 @@ export interface CreateEvent {
   t: number;
   type: "create";
   path: string;
+  /** Who created it, when announced via the plugin-write contract. Absent = the user (or an unannounced writer). */
+  by?: string;
 }
 
 /**
@@ -349,6 +351,8 @@ export interface ExtModEvent {
   t: number;
   type: "extmod";
   path: string;
+  /** Who wrote it, when the writer announced itself via the plugin-write contract (e.g. "vault-mcp"). Absent = anonymous. */
+  by?: string;
 }
 
 /**

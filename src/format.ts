@@ -141,13 +141,13 @@ export function fmtEvent(ev: LogEvent): string {
     const desc =
       ev.type === "rename" ? `renamed: ${ev.from} → ${ev.to}`
       : ev.type === "delete" ? `deleted: ${ev.path}`
-      : ev.type === "create" ? `created: ${ev.path}`
+      : ev.type === "create" ? `created${ev.by ? ` by ${ev.by}` : ""}: ${ev.path}`
       : ev.type === "firstseen" ? `first seen: ${ev.path} (${ev.counts.words}w, ${ev.counts.links} links)`
       : ev.type === "unrelate" ? `marked unrelated: ${ev.a} ✗ ${ev.b}`
       : ev.type === "relate" ? `relation restored: ${ev.a} + ${ev.b}`
       : ev.type === "context" ? (ev.name ? `context → ${ev.name}` : "context cleared")
       : ev.type === "relabel" ? `context renamed: ${ev.from} → ${ev.to}`
-      : `external edit: ${ev.path}`;
+      : `${ev.by ? `edit by ${ev.by}` : "external edit"}: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }
   const delta = ev.edit ? fmtDeltaVerbose(ev.edit).split("\n").join("; ") : "";

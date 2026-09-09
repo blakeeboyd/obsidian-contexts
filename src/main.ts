@@ -1,4 +1,4 @@
-import { App, FuzzySuggestModal, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
+import { App, EventRef, FuzzySuggestModal, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { DayBlock } from "./dayblock";
@@ -52,6 +52,8 @@ import {
 const RECENT_DEACT_GRACE_MS = 3000;
 // One extmod per path per window; AI and sync writes arrive in bursts.
 const EXTMOD_COALESCE_MS = 15_000;
+// A plugin-write announcement older than this can't explain the current modify.
+const PLUGIN_WRITE_WINDOW_MS = 15_000;
 const IDLE_CHECK_MS = 60_000;
 // A link click older than this can't explain the current activation.
 const LINK_OPEN_WINDOW_MS = 3000;
@@ -74,6 +76,11 @@ export default class ContextsPlugin extends Plugin {
   private pendingLinkFrom: { from: string; t: number } | null = null;
   // The last open-capable UI surface the user touched (explorer click, search click, modal selection).
   private lastUiOpen: { via: OpenMethod; t: number } | null = null;
+  // Plugin-write contract: writers announce themselves before writing
+  // (app.workspace.trigger("contexts:plugin-write", path, writer)), and the
+  // matching modify/create is attributed instead of logged anonymously.
+  // Provenance: cwagner223355/obsidian-recent-edits.
+  private pendingPluginWrite = new Map<string, { writer: string; t: number }>();
 
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -89,6 +96,18 @@ export default class ContextsPlugin extends Plugin {
     });
     this.patchOpenLinkText();
     this.patchSuggestModal();
+
+    // Plugin-write contract (custom event, untyped in the API).
+    const ws = this.app.workspace as unknown as {
+      on(name: string, cb: (path: string, writer: string) => void): EventRef;
+    };
+    this.registerEvent(
+      ws.on("contexts:plugin-write", (path, writer) => {
+        if (typeof path === "string" && typeof writer === "string" && writer) {
+          this.pendingPluginWrite.set(path, { writer, t: Date.now() });
+        }
+      })
+    );
 
     // Classify open-capable surfaces by where the mouse went down; the next
     // activation within the window inherits the hint.
@@ -133,7 +152,10 @@ export default class ContextsPlugin extends Plugin {
       this.registerEvent(
         this.app.vault.on("create", (file) => {
           if (file instanceof TFile && file.extension === "md" && this.settings.capture.externalEdits && this.tracked(file.path)) {
-            this.enqueue(() => this.record({ t: Date.now(), type: "create", path: file.path }));
+            const ev: LogEvent = { t: Date.now(), type: "create", path: file.path };
+            const by = this.consumeWriter(file.path);
+            if (by) ev.by = by;
+            this.enqueue(() => this.record(ev));
           }
         })
       );
@@ -423,7 +445,18 @@ export default class ContextsPlugin extends Plugin {
     if (now - (this.recentDeact.get(file.path) ?? 0) < RECENT_DEACT_GRACE_MS) return;
     if (now - (this.lastExtmod.get(file.path) ?? 0) < EXTMOD_COALESCE_MS) return;
     this.lastExtmod.set(file.path, now);
-    this.enqueue(() => this.record({ t: now, type: "extmod", path: file.path }));
+    const ev: LogEvent = { t: now, type: "extmod", path: file.path };
+    const by = this.consumeWriter(file.path);
+    if (by) ev.by = by;
+    this.enqueue(() => this.record(ev));
+  }
+
+  /** The announced writer for a path, if the announcement is still fresh; consumes it. */
+  private consumeWriter(path: string): string | undefined {
+    const p = this.pendingPluginWrite.get(path);
+    if (!p) return undefined;
+    this.pendingPluginWrite.delete(path);
+    return Date.now() - p.t < PLUGIN_WRITE_WINDOW_MS ? p.writer : undefined;
   }
 
   /** The active leaf changed: close the previous span, open one for the new file (markdown only). */

@@ -300,9 +300,9 @@ export class ContextsPane extends ItemView {
         row.addEventListener("click", () => (details.hidden = !details.hidden));
       } else {
         const [icon, label] =
-          ev.type === "create" ? ["file-plus", "created"]
+          ev.type === "create" ? ["file-plus", ev.by ? `created by ${ev.by}` : "created"]
           : ev.type === "delete" ? ["file-x", "deleted"]
-          : ev.type === "extmod" ? ["bot", "edited externally (AI, sync, script)"]
+          : ev.type === "extmod" ? ["bot", ev.by ? `edited by ${ev.by}` : "edited externally (AI, sync, script)"]
           : ev.type === "firstseen" ? ["eye", "first seen by Contexts"]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });

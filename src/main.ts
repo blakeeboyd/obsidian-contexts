@@ -136,7 +136,13 @@ export default class ContextsPlugin extends Plugin {
         const key = `${sourcePath}\u0000${dest.path}`;
         if (now - (this.lastPeek.get(key) ?? 0) < PEEK_COALESCE_MS) return;
         this.lastPeek.set(key, now);
-        this.enqueue(() => this.record({ t: now, type: "peek", path: dest.path, from: sourcePath }));
+        this.enqueue(async () => {
+          // The peek may be the record's first contact with this file: the
+          // baseline is captured through the reader's eyes, before any later
+          // edits can blur what the file looked like when first met.
+          await this.ensureBaseline(dest);
+          await this.record({ t: now, type: "peek", path: dest.path, from: sourcePath });
+        });
       })
     );
 
@@ -374,14 +380,32 @@ export default class ContextsPlugin extends Plugin {
     });
   }
 
-  /** Any event already mentions this path (under this name). ponytail: linear scan; index if the log grows large. */
-  private async isKnown(path: string): Promise<boolean> {
-    const events = await this.getEvents();
-    return events.some(
-      (ev) =>
-        ("path" in ev && ev.path === path) ||
-        ("type" in ev && ev.type === "rename" && (ev.to === path || ev.from === path))
+  /**
+   * First contact captures the baseline: if no firstseen or create exists for
+   * this path (rename-resolved), snapshot the file and log one. Peeks and
+   * extmods do NOT count as known — a file only glimpsed or externally
+   * written still needs its initial state captured, whichever contact comes
+   * first (activation, hover preview, external edit). Returns true when a
+   * baseline was just written. ponytail: linear scan per contact; index if
+   * the log grows large.
+   */
+  private async ensureBaseline(file: TFile, snap?: Snapshot): Promise<boolean> {
+    const events = applyRenames(await this.getEvents());
+    const known = events.some(
+      (ev) => "type" in ev && (ev.type === "firstseen" || ev.type === "create") && ev.path === file.path
     );
+    if (known) return false;
+    const s = snap ?? (file.extension === "md" ? await this.snapshot(file, false) : emptySnapshot());
+    await this.record({
+      t: Date.now(),
+      type: "firstseen",
+      path: file.path,
+      ctime: file.stat.ctime,
+      counts: firstSeenCounts(s),
+      links: [...new Set([...s.links, ...s.embeds])],
+      tags: s.tags,
+    });
+    return true;
   }
 
   /**
@@ -497,12 +521,15 @@ export default class ContextsPlugin extends Plugin {
     this.lastExtmod.set(file.path, now);
     const by = this.consumeWriter(file.path);
     this.enqueue(async () => {
+      // First contact via external write: capture the (post-write) baseline.
+      // The pre-write state is unknowable — the watcher fires after the fact.
+      const fresh = await this.ensureBaseline(file);
       const ev: LogEvent = { t: now, type: "extmod", path: file.path };
       if (by) ev.by = by;
       // Record WHAT changed, not just that something did: diff the file's
       // live links against the log's reconstructed belief. Links only — the
       // one signal reconstructible from the log without stored snapshots.
-      if (this.settings.capture.links) {
+      if (!fresh && this.settings.capture.links) {
         try {
           const refs = extractRefs(stripCodeFences(await this.app.vault.cachedRead(file)));
           const current = new Set([...refs.links, ...refs.embeds]);
@@ -547,19 +574,7 @@ export default class ContextsPlugin extends Plugin {
     await this.closeSpan();
     if (file && this.tracked(file.path)) {
       const snap = file.extension === "md" ? await this.snapshot(file, false) : emptySnapshot();
-      // A file with no history predates the record: log its baseline once.
-      // Files created while recording already have a create event, so they skip this.
-      if (!(await this.isKnown(file.path))) {
-        await this.record({
-          t: Date.now(),
-          type: "firstseen",
-          path: file.path,
-          ctime: file.stat.ctime,
-          counts: firstSeenCounts(snap),
-          links: [...new Set([...snap.links, ...snap.embeds])],
-          tags: snap.tags,
-        });
-      }
+      await this.ensureBaseline(file, snap);
       const ctime = this.settings.capture.ctime ? file.stat.ctime : undefined;
       this.recorder.activate(file.path, snap, Date.now(), ctime, this.consumeOpened(file.path));
     }

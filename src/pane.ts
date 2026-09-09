@@ -192,6 +192,17 @@ export class ContextsPane extends ItemView {
     const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
     contentEl.createDiv({ text: basename, cls: "contexts-title" });
 
+    // An excluded file looks identical to a never-recorded one; say why it's
+    // blank so hidden doesn't read as missing.
+    const excludedBy = s.excludedFolders.find((f) => path === f || path.startsWith(f + "/"));
+    if (excludedBy) {
+      contentEl.createDiv({
+        text: `This file is in the excluded folder "${excludedBy}". Nothing is recorded here, and any history from before the exclusion is hidden, not gone. Remove the folder from Excluded folders in settings to see it.`,
+        cls: "contexts-empty",
+      });
+      return;
+    }
+
     // The threads this file belongs to: its context memberships, by engaged time.
     const threads = fileContexts(events, path);
     if (threads.length) {

@@ -58,6 +58,7 @@ export interface ContextsSettings {
   trailDetailNewestFirst: boolean;
   paused: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
+  threadKey: string; // frontmatter key whose values seed context-name suggestions; "" disables
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -90,6 +91,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   trailDetailNewestFirst: true,
   paused: false,
   excludedFolders: [],
+  threadKey: "thread",
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -186,6 +188,16 @@ export class ContextsSettingTab extends PluginSettingTab {
       .addToggle((t) =>
         t.setValue(this.plugin.settings.trailDetailNewestFirst).onChange(async (v) => {
           this.plugin.settings.trailDetailNewestFirst = v;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Thread slug frontmatter key")
+      .setDesc("Values of this frontmatter key across the vault seed the context switcher with name suggestions (e.g. decision-record thread slugs). Empty disables.")
+      .addText((t) =>
+        t.setValue(this.plugin.settings.threadKey).onChange(async (v) => {
+          this.plugin.settings.threadKey = v.trim();
           await this.plugin.saveSettings();
         })
       );

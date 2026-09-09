@@ -146,6 +146,7 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "unrelate" ? `marked unrelated: ${ev.a} ✗ ${ev.b}`
       : ev.type === "relate" ? `relation restored: ${ev.a} + ${ev.b}`
       : ev.type === "context" ? (ev.name ? `context → ${ev.name}` : "context cleared")
+      : ev.type === "relabel" ? `context renamed: ${ev.from} → ${ev.to}`
       : `external edit: ${ev.path}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

@@ -191,6 +191,22 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "rename-context",
+      name: "Rename context",
+      callback: () => {
+        void (async () => {
+          const events = await this.getEvents();
+          const names = contextNames(events);
+          if (!names.length) {
+            new Notice("Contexts: no contexts to rename yet.");
+            return;
+          }
+          new RenameContextModal(this.app, this, names, contextFileSets(events)).open();
+        })();
+      },
+    });
+
+    this.addCommand({
       id: "insert-day-summary",
       name: "Insert or update day summary in current note",
       callback: () => void this.insertDaySummary(),
@@ -218,6 +234,14 @@ export default class ContextsPlugin extends Plugin {
     if (via) ev.via = via;
     this.enqueue(() => this.record(ev));
     new Notice(name ? `Context: ${name}` : "Context cleared");
+  }
+
+  /** Rename a context: a logged relabel event, mapped old name → new at read time. */
+  relabelContext(from: string, to: string): void {
+    to = to.trim();
+    if (!to || to === from) return;
+    this.enqueue(() => this.record({ t: Date.now(), type: "relabel", from, to }));
+    new Notice(`Context renamed: ${from} → ${to}`);
   }
 
   async openContextModal(): Promise<void> {
@@ -637,18 +661,7 @@ class ContextModal extends FuzzySuggestModal<string> {
   }
 
   renderSuggestion(match: { item: string }, el: HTMLElement): void {
-    el.createDiv({ text: match.item });
-    const files = this.ctxSets.get(match.item)?.files;
-    if (files?.size) {
-      const face = [...files]
-        .slice(0, 3)
-        .map((p) => p.split("/").pop()?.replace(/\.md$/, "") ?? p)
-        .join(", ");
-      el.createDiv({
-        text: files.size > 3 ? `${face} +${files.size - 3}` : face,
-        cls: "contexts-row-meta",
-      });
-    }
+    renderContextRow(el, match.item, this.ctxSets);
   }
 
   onChooseItem(item: string): void {
@@ -657,6 +670,88 @@ class ContextModal extends FuzzySuggestModal<string> {
     } else {
       this.plugin.declareContext(item === CLEAR_CONTEXT ? "" : item);
     }
+  }
+}
+
+/** A context row: its name and its face (the files that define it). */
+function renderContextRow(
+  el: HTMLElement,
+  name: string,
+  ctxSets: Map<string, { files: Set<string>; lastAt: number }>
+): void {
+  el.createDiv({ text: name });
+  const files = ctxSets.get(name)?.files;
+  if (files?.size) {
+    const face = [...files]
+      .slice(0, 3)
+      .map((p) => p.split("/").pop()?.replace(/\.md$/, "") ?? p)
+      .join(", ");
+    el.createDiv({
+      text: files.size > 3 ? `${face} +${files.size - 3}` : face,
+      cls: "contexts-row-meta",
+    });
+  }
+}
+
+/** Step one of a rename: pick which context. The face disambiguates anonymous "context N" labels. */
+class RenameContextModal extends FuzzySuggestModal<string> {
+  constructor(
+    app: App,
+    private plugin: ContextsPlugin,
+    private names: string[],
+    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>
+  ) {
+    super(app);
+    this.setPlaceholder("Rename which context?");
+  }
+
+  getItems(): string[] {
+    return this.names;
+  }
+
+  getItemText(item: string): string {
+    return item;
+  }
+
+  renderSuggestion(match: { item: string }, el: HTMLElement): void {
+    renderContextRow(el, match.item, this.ctxSets);
+  }
+
+  onChooseItem(item: string): void {
+    new NameModal(this.app, `Rename "${item}" to:`, item, (to) => this.plugin.relabelContext(item, to)).open();
+  }
+}
+
+/** Step two: type the new name. Enter confirms, Escape cancels. */
+class NameModal extends Modal {
+  constructor(
+    app: App,
+    private title: string,
+    private initial: string,
+    private onSubmit: (value: string) => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    this.titleEl.setText(this.title);
+    const input = this.contentEl.createEl("input", {
+      type: "text",
+      value: this.initial,
+      cls: "contexts-name-input",
+    });
+    input.focus();
+    input.select();
+    input.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter") {
+        this.close();
+        this.onSubmit(input.value);
+      }
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 

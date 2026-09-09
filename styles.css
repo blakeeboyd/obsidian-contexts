@@ -240,3 +240,7 @@
   margin-bottom: 6px;
   color: var(--text-muted);
 }
+
+.contexts-name-input {
+  width: 100%;
+}

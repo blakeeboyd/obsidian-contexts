@@ -7,7 +7,7 @@
  */
 import { fmtClock, fmtDeltaVerbose, fmtDur } from "./format";
 import { EditDelta, LogEvent, isSpan } from "./recorder";
-import { groupSessions, mergeDeltas } from "./views";
+import { groupSessions, mergeDeltas, relabeledDecls } from "./views";
 
 export const DAY_MARKER_START = "<!-- contexts-day:start -->";
 export const DAY_MARKER_END = "<!-- contexts-day:end -->";
@@ -34,9 +34,8 @@ export function dailyMarkdown(events: LogEvent[], dayStart: number, dayEnd: numb
   for (const ev of dayEvents) {
     if ("type" in ev && ev.type === "extmod") extmods.set(ev.path, (extmods.get(ev.path) ?? 0) + 1);
   }
-  const switches = dayEvents.filter(
-    (ev): ev is Extract<LogEvent, { type: "context" }> => "type" in ev && ev.type === "context"
-  );
+  // Full history for the relabel mapping, then this day's declarations.
+  const switches = relabeledDecls(events).filter((ev) => ev.t >= dayStart && ev.t < dayEnd);
   for (const ev of switches) {
     lines.push(`- ${fmtClock(ev.t)} context → ${ev.name || "(cleared)"}`);
   }

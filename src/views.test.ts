@@ -346,6 +346,69 @@ describe("guessContext", () => {
   });
 });
 
+describe("relabeledDecls", () => {
+  it("rewrites declarations to the final label everywhere", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      span("A.md", MIN),
+      { t: 20 * MIN, type: "relabel", from: "context 1", to: "grant" },
+      { t: 30 * MIN, type: "context", name: "grant" },
+      span("B.md", 31 * MIN),
+    ];
+    expect(currentContext(events)).toBe("grant");
+    expect(contextNames(events)).toEqual(["grant"]);
+    const sets = contextFileSets(events);
+    expect(sets.size).toBe(1);
+    expect([...sets.get("grant")!.files]).toEqual(["A.md", "B.md"]);
+  });
+
+  it("collapses a relabel chain", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      span("A.md", MIN),
+      { t: 10 * MIN, type: "relabel", from: "context 1", to: "draft" },
+      { t: 20 * MIN, type: "relabel", from: "draft", to: "final" },
+    ];
+    expect(currentContext(events)).toBe("final");
+    expect(fileContexts(events, "A.md")[0].name).toBe("final");
+  });
+
+  it("treats a relabeled-away name declared later as a fresh context", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      span("Old.md", MIN),
+      { t: 10 * MIN, type: "relabel", from: "context 1", to: "grant" },
+      { t: 20 * MIN, type: "context", name: "context 1" },
+      span("New.md", 21 * MIN),
+    ];
+    const sets = contextFileSets(events);
+    expect([...sets.get("grant")!.files]).toEqual(["Old.md"]);
+    expect([...sets.get("context 1")!.files]).toEqual(["New.md"]);
+  });
+
+  it("merges when relabeling onto an existing name", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "grant" },
+      span("A.md", MIN),
+      { t: 10 * MIN, type: "context", name: "context 2" },
+      span("B.md", 11 * MIN),
+      { t: 20 * MIN, type: "relabel", from: "context 2", to: "grant" },
+    ];
+    const sets = contextFileSets(events);
+    expect(sets.size).toBe(1);
+    expect([...sets.get("grant")!.files].sort()).toEqual(["A.md", "B.md"]);
+  });
+
+  it("ignores a relabel of a name never declared", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      { t: MIN, type: "relabel", from: "ghost", to: "beta" },
+    ];
+    expect(currentContext(events)).toBe("alpha");
+    expect(contextNames(events)).toEqual(["alpha"]);
+  });
+});
+
 describe("shared declared context in scoring", () => {
   it("boosts pairs the user assigned to the same context", () => {
     const events: LogEvent[] = [

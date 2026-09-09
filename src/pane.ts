@@ -244,7 +244,7 @@ export class ContextsPane extends ItemView {
     }
     for (const ev of trail) {
       // Relatedness feedback and context declarations are not any single file's trail.
-      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate" || ev.type === "context")) continue;
+      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate" || ev.type === "context" || ev.type === "relabel")) continue;
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";

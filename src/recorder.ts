@@ -408,6 +408,19 @@ export interface ContextEvent {
   via?: "guess";
 }
 
+/**
+ * A context was renamed: old name maps to new at read time, so anonymous
+ * "context N" labels can be christened once a name becomes obvious. The log
+ * keeps every declaration under the name in force when it was made; views
+ * rewrite through the relabel chain.
+ */
+export interface RelabelEvent {
+  t: number;
+  type: "relabel";
+  from: string;
+  to: string;
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -417,7 +430,8 @@ export type LogEvent =
   | FirstSeenEvent
   | UnrelateEvent
   | RelateEvent
-  | ContextEvent;
+  | ContextEvent
+  | RelabelEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

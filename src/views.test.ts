@@ -428,6 +428,20 @@ describe("shared declared context in scoring", () => {
     expect(partner.score).toBeGreaterThan(MIN_RELATED_SCORE);
     expect(bystander.score).toBeGreaterThan(MIN_RELATED_SCORE);
   });
+
+  it("applies the same bonus in allRelationships so the audit view agrees", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Me.md", MIN),
+      span("Partner.md", 90 * MIN),
+      { t: 200 * MIN, type: "context", name: "" },
+    ];
+    const sessions = groupSessions(events, 300 * MIN);
+    const ctx = contextFileSets(events);
+    const without = allRelationships(sessions, 210 * MIN)[0];
+    const withCtx = allRelationships(sessions, 210 * MIN, undefined, undefined, ctx)[0];
+    expect(withCtx.score).toBeGreaterThan(without.score);
+  });
 });
 
 describe("fileInterest", () => {

@@ -581,7 +581,8 @@ export default class ContextsPlugin extends Plugin {
       sessions,
       Date.now(),
       this.settings.halfLifeDays * 24 * 3600_000,
-      unrelatedPairs(events)
+      unrelatedPairs(events),
+      contextFileSets(events)
     );
     new RelationshipsModal(this.app, this, pairs).open();
   }

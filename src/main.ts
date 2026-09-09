@@ -41,7 +41,6 @@ import {
   contextNames,
   currentContext,
   excludeFolders,
-  GUESS_WINDOW,
   groupSessions,
   knownLinks,
   healRenames,
@@ -269,47 +268,9 @@ export default class ContextsPlugin extends Plugin {
   }
 
   async openContextModal(): Promise<void> {
-    // Excluded files can't belong to contexts, so faces and seeds skip them.
+    // Excluded files can't belong to contexts, so the faces skip them.
     const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
-    const names = contextNames(relEvents);
-    new ContextModal(
-      this.app,
-      this,
-      names,
-      currentContext(relEvents),
-      contextFileSets(relEvents),
-      this.contextSeeds(relEvents, names)
-    ).open();
-  }
-
-  /**
-   * Candidate context names not yet declared: parent folders of the recent
-   * working set, plus frontmatter thread slugs (decision-record chains). A
-   * seed is only a label suggestion — choosing one declares it like typing it.
-   */
-  private contextSeeds(events: LogEvent[], declared: string[]): Map<string, string> {
-    const taken = new Set(declared);
-    const seeds = new Map<string, string>(); // name → source
-    const spans = events.filter(isSpan).slice(-GUESS_WINDOW);
-    for (let i = spans.length - 1; i >= 0; i--) {
-      const parts = spans[i].path.split("/");
-      const folder = parts[parts.length - 2];
-      if (folder && !taken.has(folder) && !seeds.has(folder)) seeds.set(folder, "folder");
-    }
-    const key = this.settings.threadKey;
-    if (key) {
-      const slugs: { v: string; mtime: number }[] = [];
-      for (const f of this.app.vault.getMarkdownFiles()) {
-        const v = this.app.metadataCache.getFileCache(f)?.frontmatter?.[key] as unknown;
-        if (typeof v === "string" && v) slugs.push({ v, mtime: f.stat.mtime });
-      }
-      slugs.sort((a, b) => b.mtime - a.mtime);
-      for (const { v } of slugs) {
-        if (seeds.size >= MAX_SEEDS) break;
-        if (!taken.has(v) && !seeds.has(v)) seeds.set(v, key);
-      }
-    }
-    return seeds;
+    new ContextModal(this.app, this, contextNames(relEvents), currentContext(relEvents), contextFileSets(relEvents)).open();
   }
 
   /** User feedback on a pair: related=false demotes it in scoring (never deletes); true restores. */
@@ -721,8 +682,6 @@ export default class ContextsPlugin extends Plugin {
 
 const CLEAR_CONTEXT = "— no context —";
 const NEW_CONTEXT = "+ new context";
-// ponytail: switcher suggestion cap; keeps the seed list scannable.
-const MAX_SEEDS = 25;
 
 /** Next free "context N" index for the one-click, no-naming path. */
 function nextContextIndex(names: string[]): number {
@@ -745,8 +704,7 @@ class ContextModal extends FuzzySuggestModal<string> {
     private plugin: ContextsPlugin,
     private names: string[],
     private current: string | null,
-    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>,
-    private seeds: Map<string, string> = new Map()
+    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>
   ) {
     super(app);
     this.setPlaceholder(this.current ? `Context: ${this.current} — switch to…` : "Declare a context…");
@@ -756,7 +714,6 @@ class ContextModal extends FuzzySuggestModal<string> {
     const items = this.names.slice();
     const typed = this.inputEl?.value.trim();
     if (typed && !items.includes(typed)) items.unshift(typed);
-    for (const name of this.seeds.keys()) if (!items.includes(name)) items.push(name);
     items.push(NEW_CONTEXT);
     if (this.current) items.push(CLEAR_CONTEXT);
     return items;
@@ -768,10 +725,6 @@ class ContextModal extends FuzzySuggestModal<string> {
 
   renderSuggestion(match: { item: string }, el: HTMLElement): void {
     renderContextRow(el, match.item, this.ctxSets);
-    const src = this.seeds.get(match.item);
-    if (src && !this.ctxSets.has(match.item)) {
-      el.createDiv({ text: src === "folder" ? "suggested from folder" : `suggested from ${src} slug`, cls: "contexts-row-meta" });
-    }
   }
 
   onChooseItem(item: string): void {

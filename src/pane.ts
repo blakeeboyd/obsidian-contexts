@@ -16,6 +16,7 @@ import {
   excludeFolders,
   fileInterest,
   groupSessions,
+  guessContext,
   healRenames,
   isStint,
   relatedTo,
@@ -162,6 +163,17 @@ export class ContextsPane extends ItemView {
     ctxLine.createSpan({ text: ctx ? `Context: ${ctx}` : "No context declared" });
     ctxLine.setAttribute("title", "Click to declare or switch context");
     ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
+
+    // The guess, offered quietly: recognition of a return to a known context.
+    // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.
+    const guess = guessContext(events, Date.now(), s.halfLifeDays * 24 * 3600_000);
+    if (guess) {
+      const guessLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
+      setIcon(guessLine.createSpan({ cls: "contexts-chip-icon" }), "sparkles");
+      guessLine.createSpan({ text: `Working in ${guess.name}?` });
+      guessLine.setAttribute("title", "Click to confirm the guessed context");
+      guessLine.addEventListener("click", () => this.plugin.declareContext(guess.name, "guess"));
+    }
 
     // Sticky path only counts while a note is actually open somewhere AND
     // the main area isn't showing an empty "New tab" — close everything (or

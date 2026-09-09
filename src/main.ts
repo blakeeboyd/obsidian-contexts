@@ -202,8 +202,10 @@ export default class ContextsPlugin extends Plugin {
   }
 
   /** Declare (or clear, with "") the current context — a logged event like everything else. */
-  declareContext(name: string): void {
-    this.enqueue(() => this.record({ t: Date.now(), type: "context", name }));
+  declareContext(name: string, via?: "guess"): void {
+    const ev: LogEvent = { t: Date.now(), type: "context", name };
+    if (via) ev.via = via;
+    this.enqueue(() => this.record(ev));
     new Notice(name ? `Context: ${name}` : "Context cleared");
   }
 

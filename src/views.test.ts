@@ -13,6 +13,7 @@ import {
   excludeFolders,
   fileInterest,
   groupSessions,
+  guessContext,
   healRenames,
   isStint,
   mergeDeltas,
@@ -299,6 +300,33 @@ describe("declared contexts", () => {
     ];
     const out = excludeFolders(applyRenames(events), ["secret"]);
     expect(out[0]).toMatchObject({ type: "context", name: "alpha" });
+  });
+});
+
+describe("guessContext", () => {
+  it("recognizes a return to a known context and stays quiet otherwise", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("A.md", MIN),
+      span("B.md", 10 * MIN),
+      { t: 20 * MIN, type: "context", name: "" },
+      // later: back in alpha's files with no declaration
+      span("A.md", 100 * MIN),
+      span("B.md", 110 * MIN),
+    ];
+    expect(guessContext(events, 120 * MIN)?.name).toBe("alpha");
+    // Working in unknown files: nothing to recognize.
+    const foreign = ["V.md", "W.md", "X.md", "Y.md", "Z.md"].map((p, i) => span(p, (130 + i * 10) * MIN));
+    expect(guessContext([...events, ...foreign], 200 * MIN)).toBeNull();
+  });
+
+  it("never suggests the context already declared", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("A.md", MIN),
+      span("B.md", 10 * MIN),
+    ];
+    expect(guessContext(events, 20 * MIN)).toBeNull();
   });
 });
 

@@ -404,6 +404,8 @@ export interface ContextEvent {
   t: number;
   type: "context";
   name: string;
+  /** "guess" = the user confirmed the plugin's suggestion rather than declaring unprompted — calibration data for the guessing loop. */
+  via?: "guess";
 }
 
 export type LogEvent =

@@ -180,6 +180,17 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "new-context",
+      name: "New context",
+      callback: () => {
+        void (async () => {
+          const names = contextNames(await this.getEvents());
+          this.declareContext(`context ${nextContextIndex(names)}`);
+        })();
+      },
+    });
+
+    this.addCommand({
       id: "insert-day-summary",
       name: "Insert or update day summary in current note",
       callback: () => void this.insertDaySummary(),
@@ -211,7 +222,7 @@ export default class ContextsPlugin extends Plugin {
 
   async openContextModal(): Promise<void> {
     const events = await this.getEvents();
-    new ContextModal(this.app, this, contextNames(events), currentContext(events)).open();
+    new ContextModal(this.app, this, contextNames(events), currentContext(events), contextFileSets(events)).open();
   }
 
   /** User feedback on a pair: related=false demotes it in scoring (never deletes); true restores. */
@@ -583,14 +594,30 @@ export default class ContextsPlugin extends Plugin {
 }
 
 const CLEAR_CONTEXT = "— no context —";
+const NEW_CONTEXT = "+ new context";
 
-/** Pick an existing context, type a new name, or clear. The cheap gesture the declared-context model depends on. */
+/** Next free "context N" index for the one-click, no-naming path. */
+function nextContextIndex(names: string[]): number {
+  let max = 0;
+  for (const n of names) {
+    const m = n.match(/^context (\d+)$/);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
+
+/**
+ * Pick an existing context (shown with its face: the files that define it),
+ * mint an anonymous "context N" with one click, type a name, or clear.
+ * Naming is optional — a context's identity is its cluster, not its label.
+ */
 class ContextModal extends FuzzySuggestModal<string> {
   constructor(
     app: App,
     private plugin: ContextsPlugin,
     private names: string[],
-    private current: string | null
+    private current: string | null,
+    private ctxSets: Map<string, { files: Set<string>; lastAt: number }>
   ) {
     super(app);
     this.setPlaceholder(this.current ? `Context: ${this.current} — switch to…` : "Declare a context…");
@@ -600,6 +627,7 @@ class ContextModal extends FuzzySuggestModal<string> {
     const items = this.names.slice();
     const typed = this.inputEl?.value.trim();
     if (typed && !items.includes(typed)) items.unshift(typed);
+    items.push(NEW_CONTEXT);
     if (this.current) items.push(CLEAR_CONTEXT);
     return items;
   }
@@ -608,8 +636,27 @@ class ContextModal extends FuzzySuggestModal<string> {
     return item;
   }
 
+  renderSuggestion(match: { item: string }, el: HTMLElement): void {
+    el.createDiv({ text: match.item });
+    const files = this.ctxSets.get(match.item)?.files;
+    if (files?.size) {
+      const face = [...files]
+        .slice(0, 3)
+        .map((p) => p.split("/").pop()?.replace(/\.md$/, "") ?? p)
+        .join(", ");
+      el.createDiv({
+        text: files.size > 3 ? `${face} +${files.size - 3}` : face,
+        cls: "contexts-row-meta",
+      });
+    }
+  }
+
   onChooseItem(item: string): void {
-    this.plugin.declareContext(item === CLEAR_CONTEXT ? "" : item);
+    if (item === NEW_CONTEXT) {
+      this.plugin.declareContext(`context ${nextContextIndex(this.names)}`);
+    } else {
+      this.plugin.declareContext(item === CLEAR_CONTEXT ? "" : item);
+    }
   }
 }
 

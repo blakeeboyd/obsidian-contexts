@@ -446,6 +446,21 @@ export interface RelabelEvent {
   to: string;
 }
 
+/**
+ * The user's judgment that a file does NOT belong to a context, whatever the
+ * spans say — the eviction undoes automatic membership (a test file visited
+ * mid-context, an accidental detour). Applied at read time to ALL of the
+ * file's spans in that context, past and future.
+ * ponytail: total per (context, file); an un-evict inverse event if the need
+ * ever appears in practice.
+ */
+export interface EvictEvent {
+  t: number;
+  type: "evict";
+  name: string; // the context
+  path: string; // the file that does not belong
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -457,7 +472,8 @@ export type LogEvent =
   | RelateEvent
   | ContextEvent
   | RelabelEvent
-  | PeekEvent;
+  | PeekEvent
+  | EvictEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

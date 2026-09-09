@@ -479,6 +479,42 @@ describe("relabeledDecls", () => {
   });
 });
 
+describe("evict", () => {
+  it("removes the file from the context everywhere, past and future spans alike", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("Keeper.md", MIN),
+      span("Test.md", 10 * MIN),
+      { t: 20 * MIN, type: "evict", name: "alpha", path: "Test.md" },
+      span("Test.md", 30 * MIN), // revisit after eviction: still out
+    ];
+    const sets = contextFileSets(events);
+    expect([...sets.get("alpha")!.files]).toEqual(["Keeper.md"]);
+    expect(fileContexts(events, "Test.md")).toEqual([]);
+    expect(fileContexts(events, "Keeper.md")[0].name).toBe("alpha");
+  });
+
+  it("follows relabels: eviction from the old name holds under the new one", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      span("Test.md", MIN),
+      { t: 10 * MIN, type: "evict", name: "context 1", path: "Test.md" },
+      { t: 20 * MIN, type: "relabel", from: "context 1", to: "grant" },
+    ];
+    expect(contextFileSets(events).get("grant")).toBeUndefined();
+    expect(fileContexts(events, "Test.md")).toEqual([]);
+  });
+
+  it("ignores an eviction naming an unknown context", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      span("A.md", MIN),
+      { t: 10 * MIN, type: "evict", name: "ghost", path: "A.md" },
+    ];
+    expect([...contextFileSets(events).get("alpha")!.files]).toEqual(["A.md"]);
+  });
+});
+
 describe("shared declared context in scoring", () => {
   it("boosts pairs the user assigned to the same context", () => {
     const events: LogEvent[] = [

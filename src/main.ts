@@ -42,6 +42,7 @@ import {
   contextFileSets,
   contextNames,
   currentContext,
+  fileContexts,
   excludeFolders,
   groupSessions,
   knownLinks,
@@ -250,6 +251,12 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "remove-from-context",
+      name: "Remove current file from a context",
+      callback: () => void this.openEvictModal(),
+    });
+
+    this.addCommand({
       id: "rename-context",
       name: "Rename context",
       callback: () => {
@@ -308,6 +315,27 @@ export default class ContextsPlugin extends Plugin {
     if (via) ev.via = via;
     this.enqueue(() => this.record(ev));
     new Notice(name ? `Context: ${name}` : "Context cleared");
+  }
+
+  /** The user's judgment that a file does not belong to a context: a logged evict event, honored at read time for all of the file's spans there. */
+  evictFromContext(name: string, path: string): void {
+    this.enqueue(() => this.record({ t: Date.now(), type: "evict", name, path }));
+    new Notice(`Removed from ${name}: ${path.split("/").pop()}`);
+  }
+
+  async openEvictModal(): Promise<void> {
+    const path = this.lastActiveMdPath;
+    if (!path) {
+      new Notice("Contexts: open a file first.");
+      return;
+    }
+    const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const threads = fileContexts(relEvents, path);
+    if (!threads.length) {
+      new Notice("Contexts: this file belongs to no context.");
+      return;
+    }
+    new EvictModal(this.app, this, path, threads.map((t) => t.name)).open();
   }
 
   /** Rename a context: a logged relabel event, mapped old name → new at read time. */
@@ -861,6 +889,31 @@ class RenameContextModal extends FuzzySuggestModal<string> {
     const set = this.ctxSets.get(item);
     const suggestion = set && ANON_CONTEXT_RE.test(item) ? derivedLabel(set) : "";
     new NameModal(this.app, `Rename "${item}" to:`, suggestion || item, (to) => this.plugin.relabelContext(item, to)).open();
+  }
+}
+
+/** Pick which context the current file should be removed from. */
+class EvictModal extends FuzzySuggestModal<string> {
+  constructor(
+    app: App,
+    private plugin: ContextsPlugin,
+    private path: string,
+    private names: string[]
+  ) {
+    super(app);
+    this.setPlaceholder(`Remove "${this.path.split("/").pop()?.replace(/\.md$/, "")}" from which context?`);
+  }
+
+  getItems(): string[] {
+    return this.names;
+  }
+
+  getItemText(item: string): string {
+    return item;
+  }
+
+  onChooseItem(item: string): void {
+    this.plugin.evictFromContext(item, this.path);
   }
 }
 

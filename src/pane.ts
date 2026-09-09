@@ -329,6 +329,7 @@ export class ContextsPane extends ItemView {
           : ev.type === "extmod" ? ["bot", ev.by ? `edited by ${ev.by}` : "edited externally (AI, sync, script)"]
           : ev.type === "firstseen" ? ["eye", "first seen by Contexts"]
           : ev.type === "peek" ? ["glasses", `previewed from ${ev.from.split("/").pop()?.replace(/\.md$/, "") ?? ev.from}`]
+          : ev.type === "evict" ? ["scissors", `removed from ${ev.name}`]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
         line.createSpan({ text: `${fmtTime(ev.t)} · ` });

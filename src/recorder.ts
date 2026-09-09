@@ -353,6 +353,12 @@ export interface ExtModEvent {
   path: string;
   /** Who wrote it, when the writer announced itself via the plugin-write contract (e.g. "vault-mcp"). Absent = anonymous. */
   by?: string;
+  /**
+   * What the external edit changed, diffed against the log's reconstructed
+   * belief at write time. ponytail: links only — a full delta needs stored
+   * per-file snapshots; links are reconstructible from the log alone.
+   */
+  edit?: EditDelta;
 }
 
 /**

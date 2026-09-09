@@ -147,7 +147,7 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "relate" ? `relation restored: ${ev.a} + ${ev.b}`
       : ev.type === "context" ? (ev.name ? `context → ${ev.name}` : "context cleared")
       : ev.type === "relabel" ? `context renamed: ${ev.from} → ${ev.to}`
-      : `${ev.by ? `edit by ${ev.by}` : "external edit"}: ${ev.path}`;
+      : `${ev.by ? `edit by ${ev.by}` : "external edit"}: ${ev.path}${ev.edit ? ` (${fmtDeltaVerbose(ev.edit).split("\n").join("; ")})` : ""}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }
   const delta = ev.edit ? fmtDeltaVerbose(ev.edit).split("\n").join("; ") : "";

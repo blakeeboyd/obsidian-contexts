@@ -16,6 +16,7 @@ import {
   groupSessions,
   guessContext,
   healRenames,
+  knownLinks,
   isStint,
   mergeDeltas,
   pairKey,
@@ -343,6 +344,28 @@ describe("guessContext", () => {
       span("B.md", 10 * MIN),
     ];
     expect(guessContext(events, 20 * MIN)).toBeNull();
+  });
+});
+
+describe("knownLinks", () => {
+  it("replays baseline plus adds and removes from spans and extmods", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "firstseen", path: "A.md", counts: { words: 0, links: 1, tags: 0, headings: 0, highlights: 0, footnotes: 0, tasksOpen: 0, tasksDone: 0 }, links: ["Base"], tags: [] },
+      { ...span("A.md", MIN), edit: { linksAdded: ["FromSpan"], linksRemoved: ["Base"] } },
+      { t: 20 * MIN, type: "extmod", path: "A.md", edit: { linksAdded: ["FromAI"] } },
+      { ...span("B.md", 30 * MIN), edit: { linksAdded: ["OtherFile"] } },
+    ];
+    expect([...knownLinks(events, "A.md")].sort()).toEqual(["FromAI", "FromSpan"]);
+  });
+
+  it("starts empty for a created file and resets on re-create", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "create", path: "A.md" },
+      { ...span("A.md", MIN), edit: { linksAdded: ["X"] } },
+      { t: 20 * MIN, type: "delete", path: "A.md" },
+      { t: 30 * MIN, type: "create", path: "A.md" },
+    ];
+    expect(knownLinks(events, "A.md").size).toBe(0);
   });
 });
 

@@ -163,19 +163,31 @@ export class ContextsPane extends ItemView {
     const relEvents = excludeFolders(events, s.excludedFolders);
     const sessions = groupSessions(relEvents, s.sessionGapMin * 60_000);
 
+    // Sticky path only counts while a note is actually open somewhere AND
+    // the main area isn't showing an empty "New tab" — close everything (or
+    // open a fresh tab) and the pane falls back to the sessions view.
+    const anyNoteOpen = this.app.workspace.getLeavesOfType("markdown").length > 0;
+    const mainIsEmpty = this.app.workspace.getMostRecentLeaf()?.view.getViewType() === "empty";
+    const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
+    const excludedBy = path ? s.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
+
     // The declared context, always visible, one click to switch — the cheap
-    // gesture the declared-context model depends on.
+    // gesture the declared-context model depends on. An excluded file has no
+    // context BY BEING excluded, so the line says so instead of implying the
+    // current declaration covers it.
     const ctx = currentContext(relEvents);
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
     setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
-    ctxLine.createSpan({ text: ctx ? `Context: ${ctx}` : "No context declared" });
+    ctxLine.createSpan({
+      text: excludedBy ? "No context: excluded file" : ctx ? `Context: ${ctx}` : "No context declared",
+    });
     ctxLine.setAttribute("title", "Click to declare or switch context");
     ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
 
     // The guess, offered quietly: recognition of a return to a known context.
     // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.
     const guess = guessContext(relEvents, Date.now(), s.halfLifeDays * 24 * 3600_000);
-    if (guess) {
+    if (guess && !excludedBy) {
       const guessLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
       setIcon(guessLine.createSpan({ cls: "contexts-chip-icon" }), "sparkles");
       guessLine.createSpan({ text: `Working in ${guess.name}?` });
@@ -183,12 +195,6 @@ export class ContextsPane extends ItemView {
       guessLine.addEventListener("click", () => this.plugin.declareContext(guess.name, "guess"));
     }
 
-    // Sticky path only counts while a note is actually open somewhere AND
-    // the main area isn't showing an empty "New tab" — close everything (or
-    // open a fresh tab) and the pane falls back to the sessions view.
-    const anyNoteOpen = this.app.workspace.getLeavesOfType("markdown").length > 0;
-    const mainIsEmpty = this.app.workspace.getMostRecentLeaf()?.view.getViewType() === "empty";
-    const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
     if (!path) {
       this.renderActiveFiles(contentEl, events);
       this.renderSessions(contentEl, groupSessions(events, s.sessionGapMin * 60_000));
@@ -200,7 +206,6 @@ export class ContextsPane extends ItemView {
 
     // Excluded files are still logged and their trail still shows; what they
     // lose is membership — no contexts, no relatedness. Say so.
-    const excludedBy = s.excludedFolders.find((f) => path === f || path.startsWith(f + "/"));
     if (excludedBy) {
       contentEl.createDiv({
         text: `In the excluded folder "${excludedBy}": the trail is recorded and shown, but this file stays out of contexts and relatedness.`,
@@ -328,10 +333,13 @@ export class ContextsPane extends ItemView {
         setIcon(line.createSpan({ cls: "contexts-chip-icon" }), icon);
         line.setAttribute("title", label);
         line.setAttribute("aria-label", label);
+        // An external edit that knows what changed shows it, same as a stint.
+        if (ev.type === "extmod" && ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // Same drill-down as stints: icon scans, the expansion spells it out.
         const details = row.createDiv({ cls: "contexts-trail-details" });
         details.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-details-header" });
         details.createDiv({ text: ev.type === "rename" ? `${ev.from} → ${ev.to}` : ev.path });
+        if (ev.type === "extmod" && ev.edit) this.renderDelta(details.createDiv({ cls: "contexts-trail-delta" }), ev.edit, ev.path);
         if (ev.type === "firstseen") {
           const c = ev.counts;
           if (ev.ctime) details.createDiv({ text: `created ${fmtTime(ev.ctime)}` });

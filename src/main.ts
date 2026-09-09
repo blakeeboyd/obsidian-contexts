@@ -43,6 +43,7 @@ import {
   excludeFolders,
   GUESS_WINDOW,
   groupSessions,
+  knownLinks,
   healRenames,
   relatedTo,
   unrelatedPairs,
@@ -488,10 +489,31 @@ export default class ContextsPlugin extends Plugin {
     if (now - (this.recentDeact.get(file.path) ?? 0) < RECENT_DEACT_GRACE_MS) return;
     if (now - (this.lastExtmod.get(file.path) ?? 0) < EXTMOD_COALESCE_MS) return;
     this.lastExtmod.set(file.path, now);
-    const ev: LogEvent = { t: now, type: "extmod", path: file.path };
     const by = this.consumeWriter(file.path);
-    if (by) ev.by = by;
-    this.enqueue(() => this.record(ev));
+    this.enqueue(async () => {
+      const ev: LogEvent = { t: now, type: "extmod", path: file.path };
+      if (by) ev.by = by;
+      // Record WHAT changed, not just that something did: diff the file's
+      // live links against the log's reconstructed belief. Links only — the
+      // one signal reconstructible from the log without stored snapshots.
+      if (this.settings.capture.links) {
+        try {
+          const refs = extractRefs(stripCodeFences(await this.app.vault.cachedRead(file)));
+          const current = new Set([...refs.links, ...refs.embeds]);
+          const known = knownLinks(applyRenames(await this.getEvents()), file.path);
+          const added = [...current].filter((l) => !known.has(l));
+          const removed = [...known].filter((l) => !current.has(l));
+          if (added.length || removed.length) {
+            ev.edit = {};
+            if (added.length) ev.edit.linksAdded = added;
+            if (removed.length) ev.edit.linksRemoved = removed;
+          }
+        } catch (e) {
+          console.error("Contexts: extmod link diff failed", e);
+        }
+      }
+      await this.record(ev);
+    });
   }
 
   /** The announced writer for a path, if the announcement is still fresh; consumes it. */

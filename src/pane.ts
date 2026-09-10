@@ -1,9 +1,10 @@
 import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { isSpan } from "./recorder";
-import type { EditDelta, LogEvent, SpanEvent } from "./recorder";
+import type { EditDelta, LogEvent, PeekEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import type ContextsPlugin from "./main";
 import {
+  ContextSet,
   MIN_RELATED_SCORE,
   PairScore,
   Session,
@@ -256,7 +257,7 @@ export class ContextsPane extends ItemView {
           onClick: () => this.plugin.markRelated(path, r.path, false),
         });
       }
-      this.renderHiddenConnections(contentEl, sessions, dismissed, path);
+      this.renderHiddenConnections(contentEl, sessions, dismissed, path, contextFileSets(relEvents), peekEvents(relEvents), ctxOfSpans);
     }
 
     // Trail: this file's own history, newest first.
@@ -401,11 +402,15 @@ export class ContextsPane extends ItemView {
     contentEl: HTMLElement,
     sessions: Session[],
     dismissed: Map<string, number>,
-    path: string
+    path: string,
+    ctxSets: Map<string, ContextSet>,
+    peeks: PeekEvent[],
+    ctxOf: Map<SpanEvent, string>
   ): void {
     if (!dismissed.size) return;
     const s = this.plugin.settings;
-    const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed).filter(
+    // Full evidence, so a hidden pair's score here agrees with the audit modal.
+    const pairs = allRelationships(sessions, Date.now(), s.halfLifeDays * 24 * 3600_000, dismissed, ctxSets, peeks, ctxOf).filter(
       (p) => p.dismissed && (p.a === path || p.b === path)
     );
     if (!pairs.length) return;

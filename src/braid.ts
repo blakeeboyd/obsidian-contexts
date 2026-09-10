@@ -57,6 +57,8 @@ export class BraidView extends ItemView {
   private renderQueued = false;
   // One shared styled hover card; SVG <title> gives the OS's slow unstyled tooltip.
   private tipEl: HTMLElement | null = null;
+  // Horizontal position, kept across the re-renders every logged event triggers.
+  private scrollX: number | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
@@ -174,6 +176,7 @@ export class BraidView extends ItemView {
     // so row names stay pinned while the timeline scrolls (the left-rail
     // pattern every reference shares: Notion, Asana, Toggl).
     const scroll = contentEl.createDiv({ cls: "contexts-braid-scroll" });
+    scroll.addEventListener("scroll", () => (this.scrollX = scroll.scrollLeft));
     const body = scroll.createDiv({ cls: "contexts-braid-body" });
     const rail = body.createDiv({ cls: "contexts-braid-rail" });
     rail.style.height = `${y}px`;
@@ -205,14 +208,17 @@ export class BraidView extends ItemView {
     const title = (el: Element, text: string) => this.tip(el, text);
 
     // Session headers, hairline hour grid (Notion-register ruler), separators.
+    // One shared cursor keeps every ruler label (session and tick alike)
+    // from overlapping its neighbor when short sessions crowd together.
+    let lastLabelEnd = -Infinity;
+    const rulerLabel = (x: number, text: string, cls: string): void => {
+      if (x < lastLabelEnd + 8) return;
+      const el = svg.createSvg("text", { attr: { x, y: HEADER_H - 10 }, cls });
+      el.textContent = text;
+      lastLabelEnd = x + text.length * 5.5;
+    };
     ts.segs.forEach((seg, i) => {
-      const label = svg.createSvg("text", {
-        attr: { x: seg.x0, y: HEADER_H - 10 },
-        cls: "contexts-braid-session-label",
-      });
-      label.textContent = `${relDay(seg.start)} ${fmtClock(seg.start)}`;
-      // Hour ticks with full-height hairlines; the first hour mark that would
-      // collide with the session label is skipped.
+      rulerLabel(seg.x0, `${relDay(seg.start)} ${fmtClock(seg.start)}`, "contexts-braid-session-label");
       const HOUR = 3600_000;
       for (let t = Math.ceil(seg.start / HOUR) * HOUR; t <= seg.end; t += HOUR) {
         const x = scaleX(ts, t);
@@ -220,13 +226,7 @@ export class BraidView extends ItemView {
           attr: { x1: x, y1: HEADER_H - 6, x2: x, y2: y },
           cls: "contexts-braid-grid",
         });
-        if (x - seg.x0 > 44) {
-          const tick = svg.createSvg("text", {
-            attr: { x: x + 3, y: HEADER_H - 10 },
-            cls: "contexts-braid-tick-label",
-          });
-          tick.textContent = fmtClock(t);
-        }
+        rulerLabel(x + 3, fmtClock(t), "contexts-braid-tick-label");
       }
       if (i > 0) {
         svg.createSvg("line", {
@@ -412,5 +412,11 @@ export class BraidView extends ItemView {
         line.addEventListener("pointerup", up);
       });
     }
+
+    // Open at the record's recent end (every reference opens at today);
+    // afterwards the user's own scroll position survives re-renders.
+    requestAnimationFrame(() => {
+      scroll.scrollLeft = this.scrollX ?? scroll.scrollWidth;
+    });
   }
 }

@@ -285,6 +285,27 @@
 
 .contexts-braid-band-label {
   font-weight: 600;
+  fill: var(--text-normal);
+}
+
+.contexts-braid-tick-label {
+  font-size: 9px;
+  fill: var(--text-faint);
+}
+
+.contexts-braid-grid {
+  stroke: var(--background-modifier-border);
+  stroke-width: 0.5;
+  opacity: 0.55;
+}
+
+.contexts-braid-now {
+  stroke: var(--color-red);
+  stroke-width: 1;
+}
+
+.contexts-braid-now-dot {
+  fill: var(--color-red);
 }
 
 .contexts-braid-strand-label {
@@ -298,15 +319,17 @@
 }
 
 .contexts-braid-hull {
-  fill-opacity: 0.08;
-  stroke-opacity: 0.35;
-  stroke-width: 1.5;
+  fill-opacity: 0.05;
+  stroke: none;
 }
 
 .contexts-braid-strand {
-  stroke-width: 2.5;
-  stroke-linecap: round;
+  fill-opacity: 0.4;
   cursor: pointer;
+}
+
+.contexts-braid-strand:hover {
+  fill-opacity: 0.65;
 }
 
 .contexts-braid-ring {

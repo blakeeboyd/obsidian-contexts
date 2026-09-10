@@ -26,6 +26,7 @@ const BAND_GAP = 18;
 const HEADER_H = 26;
 const ROPE_H = 18; // hull height at the ropes grain
 const BEAD_R = 3.5;
+const PILL_H = 7; // strand pill thickness (Notion bar weight)
 
 
 /** Semantic zoom: ropes → strands → visits (groupSessions → per-rope strands → raw spans). */
@@ -145,13 +146,30 @@ export class BraidView extends ItemView {
       el.createSvg("title").textContent = text;
     };
 
-    // Session headers and separators.
+    // Session headers, hairline hour grid (Notion-register ruler), separators.
     ts.segs.forEach((seg, i) => {
       const label = svg.createSvg("text", {
         attr: { x: seg.x0, y: HEADER_H - 10 },
         cls: "contexts-braid-session-label",
       });
       label.textContent = `${relDay(seg.start)} ${fmtClock(seg.start)}`;
+      // Hour ticks with full-height hairlines; the first hour mark that would
+      // collide with the session label is skipped.
+      const HOUR = 3600_000;
+      for (let t = Math.ceil(seg.start / HOUR) * HOUR; t <= seg.end; t += HOUR) {
+        const x = scaleX(ts, t);
+        svg.createSvg("line", {
+          attr: { x1: x, y1: HEADER_H - 6, x2: x, y2: y },
+          cls: "contexts-braid-grid",
+        });
+        if (x - seg.x0 > 44) {
+          const tick = svg.createSvg("text", {
+            attr: { x: x + 3, y: HEADER_H - 10 },
+            cls: "contexts-braid-tick-label",
+          });
+          tick.textContent = fmtClock(t);
+        }
+      }
       if (i > 0) {
         svg.createSvg("line", {
           attr: { x1: seg.x0 - SESSION_GAP_PX / 2, y1: 0, x2: seg.x0 - SESSION_GAP_PX / 2, y2: y },
@@ -160,6 +178,16 @@ export class BraidView extends ItemView {
       }
     });
 
+    // Now: a red hairline with a dot at the top (Notion's today marker),
+    // only while the record's edge is actually near the present.
+    const now = Date.now();
+    const lastSeg = ts.segs[ts.segs.length - 1];
+    if (now <= lastSeg.end + gapMs) {
+      const nx = scaleX(ts, Math.min(now, lastSeg.end));
+      svg.createSvg("line", { attr: { x1: nx, y1: HEADER_H - 4, x2: nx, y2: y }, cls: "contexts-braid-now" });
+      svg.createSvg("circle", { attr: { cx: nx, cy: HEADER_H - 4, r: 2.5 }, cls: "contexts-braid-now-dot" });
+    }
+
     // Hulls, one per rope; the band label sits at the band's first rope.
     const labeled = new Set<string>();
     for (const r of ropes) {
@@ -167,21 +195,26 @@ export class BraidView extends ItemView {
       const x1 = scaleX(ts, r.end) + HULL_PAD;
       const by = bandY.get(r.ctx)!;
       const bh = bandH.get(r.ctx)!;
+      // Quiet hull: a background wash with no stroke — the context's color
+      // lives in its identity dot and in the strand pills, not in the frame.
       const hull = svg.createSvg("rect", {
-        attr: { x: x0, y: by, width: Math.max(x1 - x0, 8), height: bh, rx: 8 },
+        attr: { x: x0, y: by, width: Math.max(x1 - x0, 8), height: bh, rx: 6 },
         cls: "contexts-braid-hull",
       });
       hull.style.fill = colorOf(r.ctx);
-      hull.style.stroke = colorOf(r.ctx);
       const engaged = r.spans.reduce((sum, sp) => sum + sp.dur, 0);
       title(hull, `${r.ctx || "(no context)"} · ${fmtClock(r.start)} → ${fmtClock(r.end)} · ${fmtDur(engaged)} engaged`);
       if (!labeled.has(r.ctx)) {
         labeled.add(r.ctx);
+        const dot = svg.createSvg("circle", {
+          attr: { cx: x0 + 4, cy: by - 8, r: 3.5 },
+          cls: "contexts-braid-band-dot",
+        });
+        dot.style.fill = colorOf(r.ctx);
         const label = svg.createSvg("text", {
-          attr: { x: x0 + 4, y: by - 4 },
+          attr: { x: x0 + 11, y: by - 4 },
           cls: "contexts-braid-band-label",
         });
-        label.style.fill = colorOf(r.ctx);
         label.textContent = r.ctx || "(no context)";
       }
     }
@@ -213,17 +246,22 @@ export class BraidView extends ItemView {
         for (const [path, spans] of byFile) {
           const cy = laneY(r.ctx, path);
           const segments = this.grain === "visits" ? spans.map((sp) => [sp.start, sp.t] as const) : [[spans[0].start, spans[spans.length - 1].t] as const];
+          let lastX = 0;
           for (const [t0, t1] of segments) {
-            const line = svg.createSvg("line", {
-              attr: { x1: scaleX(ts, t0), y1: cy, x2: Math.max(scaleX(ts, t1), scaleX(ts, t0) + 2), y2: cy },
+            // Thin tinted pill (Notion's bar weight), not a wire.
+            const px0 = scaleX(ts, t0);
+            const pw = Math.max(scaleX(ts, t1) - px0, 4);
+            const pill = svg.createSvg("rect", {
+              attr: { x: px0, y: cy - PILL_H / 2, width: pw, height: PILL_H, rx: PILL_H / 2 },
               cls: "contexts-braid-strand",
             });
-            line.style.stroke = colorOf(r.ctx);
-            title(line, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)}`);
-            line.addEventListener("click", (evt) => {
+            pill.style.fill = colorOf(r.ctx);
+            title(pill, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)}`);
+            pill.addEventListener("click", (evt) => {
               const file = this.app.vault.getAbstractFileByPath(path);
               if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
             });
+            lastX = Math.max(lastX, px0 + pw);
           }
           // Beads: edits. Junction rings: arrivals via a followed link.
           for (const sp of spans) {
@@ -244,9 +282,10 @@ export class BraidView extends ItemView {
               title(bead, `edited · ${fmtClock(sp.t)}`);
             }
           }
-          // File label at the strand's start.
+          // File label beside the strand's end (Notion puts titles next to
+          // short bars; lanes are per-file, so labels never stack vertically).
           const label = svg.createSvg("text", {
-            attr: { x: scaleX(ts, spans[0].start) + 3, y: cy - 4 },
+            attr: { x: lastX + 6, y: cy + 3.5 },
             cls: "contexts-braid-strand-label",
           });
           label.textContent = path.split("/").pop()?.replace(/\.md$/, "") ?? path;

@@ -249,3 +249,94 @@
   font-style: italic;
   opacity: 0.7;
 }
+
+.contexts-note-text {
+  font-style: italic;
+  color: var(--text-normal);
+}
+
+.contexts-braid-view {
+  padding: 8px;
+}
+
+.contexts-braid-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.contexts-braid-hint {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.contexts-braid-scroll {
+  overflow: auto;
+}
+
+.contexts-braid-session-label,
+.contexts-braid-band-label,
+.contexts-braid-strand-label {
+  font-size: 10px;
+  fill: var(--text-muted);
+}
+
+.contexts-braid-band-label {
+  font-weight: 600;
+}
+
+.contexts-braid-strand-label {
+  fill: var(--text-faint);
+  pointer-events: none;
+}
+
+.contexts-braid-separator {
+  stroke: var(--background-modifier-border);
+  stroke-dasharray: 2 4;
+}
+
+.contexts-braid-hull {
+  fill-opacity: 0.08;
+  stroke-opacity: 0.35;
+  stroke-width: 1.5;
+}
+
+.contexts-braid-strand {
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  cursor: pointer;
+}
+
+.contexts-braid-ring {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.contexts-braid-peek {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 2;
+}
+
+.contexts-braid-extmod {
+  fill: var(--color-red);
+}
+
+.contexts-braid-note {
+  fill: var(--color-yellow);
+}
+
+.contexts-braid-seam {
+  stroke: var(--text-muted);
+  stroke-width: 7;
+  stroke-opacity: 0.25;
+  stroke-dasharray: 4 3;
+  cursor: ew-resize;
+}
+
+.contexts-braid-seam:hover {
+  stroke-opacity: 0.6;
+}

@@ -475,6 +475,21 @@ export interface EvictEvent {
   path: string; // the file that does not belong
 }
 
+/**
+ * A waypoint: a fleeting note-to-self deposited on the trail at the moment
+ * of thought. `path` is the file in front of the user when it was made
+ * (absent = none). The context in force is derived at read time from
+ * declarations, so relabels and retroactive covers rewrite it for free.
+ * `by` marks a non-human author ("ai" for the notetaker); absent = the user.
+ */
+export interface NoteEvent {
+  t: number;
+  type: "note";
+  text: string;
+  path?: string;
+  by?: string;
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -487,7 +502,8 @@ export type LogEvent =
   | ContextEvent
   | RelabelEvent
   | PeekEvent
-  | EvictEvent;
+  | EvictEvent
+  | NoteEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

@@ -38,6 +38,21 @@ function span(path: string, start: number, dur = 5 * MIN, ctime?: number): SpanE
 }
 
 describe("applyRenames", () => {
+  it("rewrites a note's path through renames; pathless notes pass untouched", () => {
+    const events: LogEvent[] = [
+      span("A.md", 0),
+      { t: 5 * MIN, type: "note", text: "waypoint", path: "A.md" },
+      { t: 6 * MIN, type: "note", text: "floating" },
+      { t: 10 * MIN, type: "rename", from: "A.md", to: "B.md" },
+    ];
+    const out = applyRenames(events);
+    expect(out[1]).toMatchObject({ type: "note", path: "B.md" });
+    expect(out[2]).toMatchObject({ type: "note", text: "floating" });
+    expect("path" in out[2]).toBe(false);
+    // The note rides the trail of its (renamed) file.
+    expect(trailFor("B.md", out).some((ev) => "type" in ev && ev.type === "note")).toBe(true);
+  });
+
   it("resolves a rename chain to the final name", () => {
     const events: LogEvent[] = [
       span("A.md", 0),

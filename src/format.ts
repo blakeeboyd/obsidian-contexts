@@ -149,6 +149,7 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "relabel" ? `context renamed: ${ev.from} → ${ev.to}`
       : ev.type === "peek" ? `peeked: ${ev.path} ← ${ev.from}`
       : ev.type === "evict" ? `removed from context: ${ev.path} ✗ ${ev.name}`
+      : ev.type === "note" ? `note${ev.by ? ` by ${ev.by}` : ""}: ${ev.text}${ev.path ? ` (${ev.path})` : ""}`
       : `${ev.by ? `edit by ${ev.by}` : "external edit"}: ${ev.path}${ev.edit ? ` (${fmtDeltaVerbose(ev.edit).split("\n").join("; ")})` : ""}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

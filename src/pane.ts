@@ -343,18 +343,21 @@ export class ContextsPane extends ItemView {
           : ev.type === "firstseen" ? ["eye", "first seen by Contexts"]
           : ev.type === "peek" ? ["glasses", `previewed from ${ev.from.split("/").pop()?.replace(/\.md$/, "") ?? ev.from}`]
           : ev.type === "evict" ? ["scissors", `removed from ${ev.name}`]
+          : ev.type === "note" ? ["message-circle", ev.by ? `note by ${ev.by}` : "waypoint note"]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
         line.createSpan({ text: `${fmtTime(ev.t)} · ` });
         setIcon(line.createSpan({ cls: "contexts-chip-icon" }), icon);
         line.setAttribute("title", label);
         line.setAttribute("aria-label", label);
+        // A waypoint's text IS the event: it reads inline, no expansion needed.
+        if (ev.type === "note") line.createSpan({ text: ` ${ev.text}`, cls: "contexts-note-text" });
         // An external edit that knows what changed shows it, same as a stint.
         if (ev.type === "extmod" && ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // Same drill-down as stints: icon scans, the expansion spells it out.
         const details = row.createDiv({ cls: "contexts-trail-details" });
         details.createDiv({ text: `${fmtTime(ev.t)} · ${label}`, cls: "contexts-details-header" });
-        details.createDiv({ text: ev.type === "rename" ? `${ev.from} → ${ev.to}` : ev.path });
+        details.createDiv({ text: ev.type === "rename" ? `${ev.from} → ${ev.to}` : ev.type === "note" ? ev.text : ev.path });
         if (ev.type === "extmod" && ev.edit) this.renderDelta(details.createDiv({ cls: "contexts-trail-delta" }), ev.edit, ev.path);
         if (ev.type === "firstseen") {
           const c = ev.counts;

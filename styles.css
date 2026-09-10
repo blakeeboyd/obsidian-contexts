@@ -263,7 +263,38 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.contexts-braid-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.contexts-braid-seg-btn {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  height: auto;
+}
+
+.contexts-braid-seg-btn:hover {
+  color: var(--text-normal);
+}
+
+.contexts-braid-seg-btn.is-active {
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .contexts-braid-hint {
@@ -276,21 +307,89 @@
   overflow: auto;
 }
 
-.contexts-braid-session-label,
-.contexts-braid-band-label,
-.contexts-braid-strand-label {
-  font-size: 10px;
-  fill: var(--text-muted);
+.contexts-braid-body {
+  display: flex;
+  align-items: flex-start;
+  width: max-content;
 }
 
-.contexts-braid-band-label {
+.contexts-braid-rail {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: 0 0 172px;
+  width: 172px;
+  background: var(--background-primary);
+  border-right: 1px solid var(--background-modifier-border);
+}
+
+.contexts-braid-rail-band {
+  position: absolute;
+  left: 6px;
+  right: 8px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-ui-smaller);
   font-weight: 600;
-  fill: var(--text-normal);
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contexts-braid-rail-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.contexts-braid-rail-file {
+  position: absolute;
+  left: 20px;
+  right: 8px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.contexts-braid-rail-file:hover {
+  color: var(--text-normal);
+}
+
+.contexts-braid-tip {
+  position: fixed;
+  display: none;
+  z-index: var(--layer-tooltip, 200);
+  max-width: 320px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.15));
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  pointer-events: none;
+}
+
+.contexts-braid-session-label {
+  font-size: 10px;
+  font-weight: 500;
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .contexts-braid-tick-label {
   font-size: 9px;
   fill: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .contexts-braid-grid {
@@ -308,10 +407,6 @@
   fill: var(--color-red);
 }
 
-.contexts-braid-strand-label {
-  fill: var(--text-faint);
-  pointer-events: none;
-}
 
 .contexts-braid-separator {
   stroke: var(--background-modifier-border);
@@ -324,12 +419,15 @@
 }
 
 .contexts-braid-strand {
-  fill-opacity: 0.4;
+  fill-opacity: 0.3;
+  stroke-opacity: 0.6;
+  stroke-width: 1;
   cursor: pointer;
 }
 
 .contexts-braid-strand:hover {
-  fill-opacity: 0.65;
+  fill-opacity: 0.55;
+  stroke-opacity: 0.9;
 }
 
 .contexts-braid-ring {

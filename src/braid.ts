@@ -55,9 +55,41 @@ export class BraidView extends ItemView {
   private grain: Grain = "strands";
   private dragging = false;
   private renderQueued = false;
+  // One shared styled hover card; SVG <title> gives the OS's slow unstyled tooltip.
+  private tipEl: HTMLElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
+  }
+
+  async onClose(): Promise<void> {
+    this.tipEl?.remove();
+    this.tipEl = null;
+  }
+
+  private tip(el: Element, text: string): void {
+    el.addEventListener("pointerenter", (evt) => {
+      const t = this.tipEl ?? (this.tipEl = document.body.createDiv({ cls: "contexts-braid-tip" }));
+      t.setText(text);
+      t.style.display = "block";
+      this.moveTip(evt as PointerEvent);
+    });
+    el.addEventListener("pointermove", (evt) => this.moveTip(evt as PointerEvent));
+    el.addEventListener("pointerleave", () => this.hideTip());
+  }
+
+  private hideTip(): void {
+    if (this.tipEl) this.tipEl.style.display = "none";
+  }
+
+  private moveTip(evt: PointerEvent): void {
+    if (!this.tipEl) return;
+    const pad = 12;
+    const w = this.tipEl.offsetWidth;
+    let x = evt.clientX + pad;
+    if (x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
+    this.tipEl.style.left = `${x}px`;
+    this.tipEl.style.top = `${Math.min(evt.clientY + pad, window.innerHeight - this.tipEl.offsetHeight - 8)}px`;
   }
 
   getViewType(): string {
@@ -84,11 +116,13 @@ export class BraidView extends ItemView {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("contexts-braid-view");
+    this.hideTip(); // the elements holding its leave-listener are gone
 
     const header = contentEl.createDiv({ cls: "contexts-braid-header" });
+    const seg = header.createDiv({ cls: "contexts-braid-seg" });
     for (const g of ["ropes", "strands", "visits"] as Grain[]) {
-      const b = header.createEl("button", { text: g });
-      if (g === this.grain) b.addClass("mod-cta");
+      const b = seg.createEl("button", { text: g[0].toUpperCase() + g.slice(1), cls: "contexts-braid-seg-btn" });
+      if (g === this.grain) b.addClass("is-active");
       b.addEventListener("click", () => {
         this.grain = g;
         void this.render();
@@ -136,15 +170,39 @@ export class BraidView extends ItemView {
     const laneY = (ctx: string, path: string) =>
       (bandY.get(ctx) ?? 0) + HULL_PAD + (laneOf.get(ctx)?.get(path) ?? 0) * LANE_H + LANE_H / 2;
 
+    // One scroll container for both axes; the rail sticks to the left edge
+    // so row names stay pinned while the timeline scrolls (the left-rail
+    // pattern every reference shares: Notion, Asana, Toggl).
     const scroll = contentEl.createDiv({ cls: "contexts-braid-scroll" });
-    const svg = scroll.createSvg("svg", {
+    const body = scroll.createDiv({ cls: "contexts-braid-body" });
+    const rail = body.createDiv({ cls: "contexts-braid-rail" });
+    rail.style.height = `${y}px`;
+    for (const ctx of bandOrder) {
+      const by = bandY.get(ctx)!;
+      const bandRow = rail.createDiv({ cls: "contexts-braid-rail-band" });
+      bandRow.style.top = `${by - 19}px`;
+      bandRow.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(ctx);
+      bandRow.createSpan({ text: ctx || "(no context)" });
+      if (this.grain === "ropes") continue;
+      for (const [path, lane] of laneOf.get(ctx)!) {
+        const row = rail.createDiv({
+          cls: "contexts-braid-rail-file",
+          text: path.split("/").pop()?.replace(/\.md$/, "") ?? path,
+        });
+        row.style.top = `${by + HULL_PAD + lane * LANE_H}px`;
+        this.tip(row, path);
+        row.addEventListener("click", (evt) => {
+          const file = this.app.vault.getAbstractFileByPath(path);
+          if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+        });
+      }
+    }
+    const svg = body.createSvg("svg", {
       attr: { width: ts.width, height: y, viewBox: `0 0 ${ts.width} ${y}` },
       cls: "contexts-braid-svg",
     });
 
-    const title = (el: SVGElement, text: string) => {
-      el.createSvg("title").textContent = text;
-    };
+    const title = (el: Element, text: string) => this.tip(el, text);
 
     // Session headers, hairline hour grid (Notion-register ruler), separators.
     ts.segs.forEach((seg, i) => {
@@ -188,8 +246,7 @@ export class BraidView extends ItemView {
       svg.createSvg("circle", { attr: { cx: nx, cy: HEADER_H - 4, r: 2.5 }, cls: "contexts-braid-now-dot" });
     }
 
-    // Hulls, one per rope; the band label sits at the band's first rope.
-    const labeled = new Set<string>();
+    // Hulls, one per rope; naming lives in the rail.
     for (const r of ropes) {
       const x0 = scaleX(ts, r.start) - HULL_PAD;
       const x1 = scaleX(ts, r.end) + HULL_PAD;
@@ -204,19 +261,6 @@ export class BraidView extends ItemView {
       hull.style.fill = colorOf(r.ctx);
       const engaged = r.spans.reduce((sum, sp) => sum + sp.dur, 0);
       title(hull, `${r.ctx || "(no context)"} · ${fmtClock(r.start)} → ${fmtClock(r.end)} · ${fmtDur(engaged)} engaged`);
-      if (!labeled.has(r.ctx)) {
-        labeled.add(r.ctx);
-        const dot = svg.createSvg("circle", {
-          attr: { cx: x0 + 4, cy: by - 8, r: 3.5 },
-          cls: "contexts-braid-band-dot",
-        });
-        dot.style.fill = colorOf(r.ctx);
-        const label = svg.createSvg("text", {
-          attr: { x: x0 + 11, y: by - 4 },
-          cls: "contexts-braid-band-label",
-        });
-        label.textContent = r.ctx || "(no context)";
-      }
     }
 
     if (this.grain === "ropes") {
@@ -246,7 +290,6 @@ export class BraidView extends ItemView {
         for (const [path, spans] of byFile) {
           const cy = laneY(r.ctx, path);
           const segments = this.grain === "visits" ? spans.map((sp) => [sp.start, sp.t] as const) : [[spans[0].start, spans[spans.length - 1].t] as const];
-          let lastX = 0;
           for (const [t0, t1] of segments) {
             // Thin tinted pill (Notion's bar weight), not a wire.
             const px0 = scaleX(ts, t0);
@@ -256,12 +299,12 @@ export class BraidView extends ItemView {
               cls: "contexts-braid-strand",
             });
             pill.style.fill = colorOf(r.ctx);
+            pill.style.stroke = colorOf(r.ctx);
             title(pill, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)}`);
             pill.addEventListener("click", (evt) => {
               const file = this.app.vault.getAbstractFileByPath(path);
               if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
             });
-            lastX = Math.max(lastX, px0 + pw);
           }
           // Beads: edits. Junction rings: arrivals via a followed link.
           for (const sp of spans) {
@@ -282,13 +325,6 @@ export class BraidView extends ItemView {
               title(bead, `edited · ${fmtClock(sp.t)}`);
             }
           }
-          // File label beside the strand's end (Notion puts titles next to
-          // short bars; lanes are per-file, so labels never stack vertically).
-          const label = svg.createSvg("text", {
-            attr: { x: lastX + 6, y: cy + 3.5 },
-            cls: "contexts-braid-strand-label",
-          });
-          label.textContent = path.split("/").pop()?.replace(/\.md$/, "") ?? path;
         }
       }
 

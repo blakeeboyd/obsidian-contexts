@@ -256,7 +256,17 @@
 }
 
 .contexts-braid-view {
-  padding: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.contexts-braid-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
 }
 
 .contexts-braid-header {
@@ -305,6 +315,8 @@
 
 .contexts-braid-scroll {
   overflow: auto;
+  flex: 1;
+  min-width: 0;
 }
 
 .contexts-braid-body {
@@ -424,11 +436,23 @@
   stroke-opacity: 0.6;
   stroke-width: 1;
   cursor: pointer;
+  transition: fill-opacity 120ms ease, stroke-opacity 120ms ease;
 }
 
 .contexts-braid-strand:hover {
   fill-opacity: 0.55;
   stroke-opacity: 0.9;
+}
+
+.contexts-braid-strand.is-selected {
+  fill-opacity: 0.75;
+  stroke-opacity: 1;
+  stroke-width: 1.5;
+}
+
+.contexts-braid-rail-file.is-selected {
+  color: var(--text-normal);
+  font-weight: 600;
 }
 
 .contexts-braid-ring {
@@ -453,12 +477,138 @@
 
 .contexts-braid-seam {
   stroke: var(--text-muted);
-  stroke-width: 7;
-  stroke-opacity: 0.25;
-  stroke-dasharray: 4 3;
+  stroke-width: 6;
+  stroke-opacity: 0.06;
   cursor: ew-resize;
+  transition: stroke-opacity 120ms ease;
 }
 
 .contexts-braid-seam:hover {
-  stroke-opacity: 0.6;
+  stroke-opacity: 0.5;
+}
+
+.contexts-braid-detail {
+  flex: 0 0 300px;
+  width: 300px;
+  overflow-y: auto;
+  border-left: 1px solid var(--background-modifier-border);
+  padding: 4px 0 12px 14px;
+  margin-left: 12px;
+}
+
+.contexts-braid-detail-head {
+  position: relative;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 8px;
+}
+
+.contexts-braid-detail-name {
+  font-size: var(--font-ui-medium);
+  font-weight: 600;
+  padding-right: 24px;
+}
+
+.contexts-braid-detail-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.contexts-braid-detail-close:hover {
+  color: var(--text-normal);
+}
+
+.contexts-braid-detail-ctx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.contexts-braid-detail-path {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contexts-braid-detail-stats {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.contexts-braid-detail-open {
+  margin-top: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.contexts-braid-detail-day {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  margin: 10px 0 4px;
+}
+
+.contexts-braid-detail-row {
+  padding: 3px 0;
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+
+.contexts-braid-detail-time {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  margin-right: 8px;
+}
+
+.contexts-braid-detail-kind {
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.contexts-braid-detail-kind.is-edit {
+  color: var(--text-normal);
+  font-weight: 500;
+}
+
+.contexts-braid-detail-kind.is-extmod {
+  color: var(--color-red);
+}
+
+.contexts-braid-detail-kind.is-note {
+  color: var(--color-yellow);
+}
+
+.contexts-braid-detail-dur {
+  color: var(--text-faint);
+}
+
+.contexts-braid-detail-delta,
+.contexts-braid-detail-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 44px;
+}
+
+.contexts-braid-detail-meta {
+  color: var(--text-faint);
+}
+
+.contexts-braid-detail-note {
+  margin-left: 44px;
+  font-style: italic;
+  color: var(--text-normal);
 }

@@ -1,7 +1,7 @@
-import { ItemView, Keymap, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { LogEvent, SpanEvent, isSpan } from "./recorder";
 import type ContextsPlugin from "./main";
-import { fmtClock, fmtDur, relDay } from "./format";
+import { fmtClock, fmtDelta, fmtDur, relDay } from "./format";
 import {
   Rope,
   SESSION_GAP_PX,
@@ -22,7 +22,7 @@ export const BRAID_VIEW_TYPE = "contexts-braid";
 // Layout constants (pure scale constants live in views.ts).
 const LANE_H = 16;
 const HULL_PAD = 7;
-const BAND_GAP = 18;
+const BAND_GAP = 26;
 const HEADER_H = 26;
 const ROPE_H = 18; // hull height at the ropes grain
 const BEAD_R = 3.5;
@@ -59,9 +59,22 @@ export class BraidView extends ItemView {
   private tipEl: HTMLElement | null = null;
   // Horizontal position, kept across the re-renders every logged event triggers.
   private scrollX: number | null = null;
+  // A thread: one file's presence in one context. Click selects; ⌘-click opens the file.
+  private selected: { ctx: string; path: string } | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
+  }
+
+  /** Plain click selects the thread; ⌘-click opens the file (new tab, Obsidian convention). */
+  private threadClick(evt: MouseEvent, ctx: string, path: string): void {
+    if (Keymap.isModifier(evt, "Mod")) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      return;
+    }
+    this.selected = this.selected?.ctx === ctx && this.selected.path === path ? null : { ctx, path };
+    void this.render();
   }
 
   async onClose(): Promise<void> {
@@ -131,7 +144,7 @@ export class BraidView extends ItemView {
       });
     }
     header.createSpan({
-      text: "drag a seam to move a context boundary",
+      text: "click a strand for its thread · \u2318-click opens the file · drag a seam to move a boundary",
       cls: "contexts-braid-hint",
     });
 
@@ -174,8 +187,10 @@ export class BraidView extends ItemView {
 
     // One scroll container for both axes; the rail sticks to the left edge
     // so row names stay pinned while the timeline scrolls (the left-rail
-    // pattern every reference shares: Notion, Asana, Toggl).
-    const scroll = contentEl.createDiv({ cls: "contexts-braid-scroll" });
+    // pattern every reference shares: Notion, Asana, Toggl). The thread
+    // detail docks to the right of it.
+    const main = contentEl.createDiv({ cls: "contexts-braid-main" });
+    const scroll = main.createDiv({ cls: "contexts-braid-scroll" });
     scroll.addEventListener("scroll", () => (this.scrollX = scroll.scrollLeft));
     const body = scroll.createDiv({ cls: "contexts-braid-body" });
     const rail = body.createDiv({ cls: "contexts-braid-rail" });
@@ -192,12 +207,10 @@ export class BraidView extends ItemView {
           cls: "contexts-braid-rail-file",
           text: path.split("/").pop()?.replace(/\.md$/, "") ?? path,
         });
+        if (this.selected?.ctx === ctx && this.selected.path === path) row.addClass("is-selected");
         row.style.top = `${by + HULL_PAD + lane * LANE_H}px`;
         this.tip(row, path);
-        row.addEventListener("click", (evt) => {
-          const file = this.app.vault.getAbstractFileByPath(path);
-          if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
-        });
+        row.addEventListener("click", (evt) => this.threadClick(evt, ctx, path));
       }
     }
     const svg = body.createSvg("svg", {
@@ -300,11 +313,9 @@ export class BraidView extends ItemView {
             });
             pill.style.fill = colorOf(r.ctx);
             pill.style.stroke = colorOf(r.ctx);
+            if (this.selected?.ctx === r.ctx && this.selected.path === path) pill.addClass("is-selected");
             title(pill, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)}`);
-            pill.addEventListener("click", (evt) => {
-              const file = this.app.vault.getAbstractFileByPath(path);
-              if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
-            });
+            pill.addEventListener("click", (evt) => this.threadClick(evt, r.ctx, path));
           }
           // Beads: edits. Junction rings: arrivals via a followed link.
           for (const sp of spans) {
@@ -413,10 +424,102 @@ export class BraidView extends ItemView {
       });
     }
 
+    if (this.selected) this.renderDetail(main, relEvents, ctxOf, colorOf(this.selected.ctx));
+
     // Open at the record's recent end (every reference opens at today);
     // afterwards the user's own scroll position survives re-renders.
     requestAnimationFrame(() => {
       scroll.scrollLeft = this.scrollX ?? scroll.scrollWidth;
     });
+  }
+
+  /**
+   * The thread detail: one file's presence in one context, newest first —
+   * every visit with its changes, plus the acts around it (notes, external
+   * edits, previews, creation, first contact).
+   */
+  private renderDetail(main: HTMLElement, relEvents: LogEvent[], ctxOf: Map<SpanEvent, string>, color: string): void {
+    const sel = this.selected!;
+    const panel = main.createDiv({ cls: "contexts-braid-detail" });
+    const head = panel.createDiv({ cls: "contexts-braid-detail-head" });
+    const nameRow = head.createDiv({ cls: "contexts-braid-detail-name" });
+    nameRow.createSpan({ text: sel.path.split("/").pop()?.replace(/\.md$/, "") ?? sel.path });
+    const close = head.createDiv({ cls: "contexts-braid-detail-close" });
+    setIcon(close, "x");
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", () => {
+      this.selected = null;
+      void this.render();
+    });
+    const ctxRow = head.createDiv({ cls: "contexts-braid-detail-ctx" });
+    ctxRow.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = color;
+    ctxRow.createSpan({ text: sel.ctx || "(no context)" });
+    head.createDiv({ text: sel.path, cls: "contexts-braid-detail-path" });
+
+    const spans = relEvents.filter(isSpan).filter((sp) => sp.path === sel.path && (ctxOf.get(sp) ?? "") === sel.ctx);
+    const acts = relEvents.filter(
+      (ev): ev is Exclude<LogEvent, SpanEvent> =>
+        !isSpan(ev) &&
+        "path" in ev &&
+        ev.path === sel.path &&
+        (ev.type === "note" || ev.type === "extmod" || ev.type === "peek" || ev.type === "create" || ev.type === "firstseen")
+    );
+    const engaged = spans.reduce((sum, sp) => sum + sp.dur, 0);
+    const edits = spans.filter((sp) => sp.edit).length;
+    head.createDiv({
+      text: `${fmtDur(engaged)} engaged · ${spans.length} visit${spans.length === 1 ? "" : "s"} · ${edits} edit${edits === 1 ? "" : "s"}`,
+      cls: "contexts-braid-detail-stats",
+    });
+    const openLink = head.createDiv({ text: "Open file", cls: "contexts-braid-detail-open" });
+    openLink.addEventListener("click", (evt) => {
+      const file = this.app.vault.getAbstractFileByPath(sel.path);
+      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+    });
+
+    const list = panel.createDiv({ cls: "contexts-braid-detail-list" });
+    let lastDay = "";
+    const dayHeaderFor = (t: number, container: HTMLElement) => {
+      const d = relDay(t);
+      if (d !== lastDay) {
+        lastDay = d;
+        container.createDiv({ text: d, cls: "contexts-braid-detail-day" });
+      }
+    };
+    const items: { t: number; kind: "span" | "act"; span?: SpanEvent; act?: Exclude<LogEvent, SpanEvent> }[] = [
+      ...spans.map((sp) => ({ t: sp.start, kind: "span" as const, span: sp })),
+      ...acts.map((ev) => ({ t: ev.t, kind: "act" as const, act: ev })),
+    ]
+      .sort((a, b) => b.t - a.t)
+      .slice(0, 80);
+    if (!items.length) list.createDiv({ text: "No events in this thread.", cls: "contexts-empty" });
+    for (const item of items) {
+      dayHeaderFor(item.t, list);
+      const row = list.createDiv({ cls: "contexts-braid-detail-row" });
+      if (item.kind === "span" && item.span) {
+        const sp = item.span;
+        row.createSpan({ text: fmtClock(sp.start), cls: "contexts-braid-detail-time" });
+        row.createSpan({ text: sp.edit ? "edited" : "read", cls: sp.edit ? "contexts-braid-detail-kind is-edit" : "contexts-braid-detail-kind" });
+        row.createSpan({ text: fmtDur(sp.dur), cls: "contexts-braid-detail-dur" });
+        if (sp.edit) row.createDiv({ text: fmtDelta(sp.edit), cls: "contexts-braid-detail-delta" });
+        const meta: string[] = [];
+        if (sp.via === "link" && sp.from) meta.push(`via link from ${sp.from.split("/").pop()?.replace(/\.md$/, "")}`);
+        else if (sp.via) meta.push(`via ${sp.via}`);
+        if (sp.section) meta.push(`§ ${sp.section}`);
+        if (meta.length) row.createDiv({ text: meta.join(" · "), cls: "contexts-braid-detail-meta" });
+      } else if (item.act) {
+        const ev = item.act;
+        row.createSpan({ text: fmtClock(ev.t), cls: "contexts-braid-detail-time" });
+        const label =
+          ev.type === "note" ? (ev.by ? `note (${ev.by})` : "note")
+          : ev.type === "extmod" ? (ev.by ? `edit by ${ev.by}` : "external edit")
+          : ev.type === "peek" ? "previewed"
+          : ev.type === "create" ? (ev.by ? `created by ${ev.by}` : "created")
+          : "first seen";
+        row.createSpan({ text: label, cls: `contexts-braid-detail-kind is-${ev.type}` });
+        if (ev.type === "note") row.createDiv({ text: ev.text, cls: "contexts-braid-detail-note" });
+        if (ev.type === "extmod" && ev.edit) row.createDiv({ text: fmtDelta(ev.edit), cls: "contexts-braid-detail-delta" });
+        if (ev.type === "peek") row.createDiv({ text: `from ${ev.from.split("/").pop()?.replace(/\.md$/, "")}`, cls: "contexts-braid-detail-meta" });
+      }
+    }
   }
 }

@@ -472,6 +472,10 @@ export class BraidView extends ItemView {
       });
       title(line, `seam: ${a.ctx || "(no context)"} → ${b.ctx || "(no context)"} — drag to move the boundary`);
       line.addEventListener("pointerdown", (evt: PointerEvent) => {
+        // Primary button only: a right-click that lands on an invisible seam
+        // must never arm the drag — a stuck dragging flag silently queues
+        // every re-render and the braid looks frozen.
+        if (evt.button !== 0) return;
         evt.preventDefault();
         this.dragging = true;
         line.setPointerCapture(evt.pointerId);
@@ -481,12 +485,12 @@ export class BraidView extends ItemView {
           line.setAttribute("x1", String(seamX + dx));
           line.setAttribute("x2", String(seamX + dx));
         };
-        const up = (uv: PointerEvent) => {
+        const finish = (apply: boolean) => (uv: PointerEvent) => {
           line.removeEventListener("pointermove", move);
           line.removeEventListener("pointerup", up);
+          line.removeEventListener("pointercancel", cancel);
           this.dragging = false;
-          const newT = invertX(ts, seamX + (uv.clientX - startClientX), pxPerMin);
-          const claims = seamClaims(a, b, newT);
+          const claims = apply ? seamClaims(a, b, invertX(ts, seamX + (uv.clientX - startClientX), pxPerMin)) : [];
           if (claims.length) this.plugin.retroDeclare(claims);
           else if (this.renderQueued) {
             this.renderQueued = false;
@@ -496,8 +500,11 @@ export class BraidView extends ItemView {
             line.setAttribute("x2", String(seamX));
           }
         };
+        const up = finish(true);
+        const cancel = finish(false);
         line.addEventListener("pointermove", move);
         line.addEventListener("pointerup", up);
+        line.addEventListener("pointercancel", cancel);
       });
     }
 

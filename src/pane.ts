@@ -121,14 +121,21 @@ export class ContextsPane extends ItemView {
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
-    this.registerDomEvent(this.containerEl, "pointerdown", () => (this.pointerHeld = true));
-    this.registerDomEvent(window, "pointerup", () => {
+    // Primary button only: a right-click's pointerup is swallowed by the
+    // context menu it opens, so arming the hold on it froze the pane until
+    // the next real click (renders queued forever).
+    this.registerDomEvent(this.containerEl, "pointerdown", (evt) => {
+      if (evt.button === 0) this.pointerHeld = true;
+    });
+    const release = () => {
       this.pointerHeld = false;
       if (this.renderQueued) {
         this.renderQueued = false;
         void this.render();
       }
-    });
+    };
+    this.registerDomEvent(window, "pointerup", release);
+    this.registerDomEvent(window, "pointercancel", release);
   }
 
   getViewType(): string {

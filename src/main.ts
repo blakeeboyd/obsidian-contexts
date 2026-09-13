@@ -432,13 +432,21 @@ export default class ContextsPlugin extends Plugin {
   openSpanMenu(evt: MouseEvent, ctx: string, path: string, from: number, to: number): void {
     evt.preventDefault();
     void (async () => {
-      const names = contextNames(excludeFolders(await this.getEvents(), this.settings.excludedFolders));
+      const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
+      const names = contextNames(relEvents);
+      const ctxSets = contextFileSets(relEvents);
+      // Anonymous "context N" labels say nothing; show the face's top file.
+      const face = (name: string): string => {
+        const set = ctxSets.get(name);
+        const label = set && ANON_CONTEXT_RE.test(name) ? derivedLabel(set, 1) : "";
+        return label ? `${name} · ${label}` : name;
+      };
       const menu = new Menu();
       const base = path.split("/").pop()?.replace(/\.md$/, "");
       for (const name of names) {
         if (name === ctx) continue;
         menu.addItem((i) =>
-          i.setTitle(`Move to ${name}`).setIcon("compass").onClick(() => this.reassignSpans(path, name, from, to))
+          i.setTitle(`Move to ${face(name)}`).setIcon("compass").onClick(() => this.reassignSpans(path, name, from, to))
         );
       }
       if (ctx) {
@@ -448,7 +456,7 @@ export default class ContextsPlugin extends Plugin {
         menu.addSeparator();
         menu.addItem((i) =>
           i
-            .setTitle(`Remove ${base} from ${ctx} everywhere`)
+            .setTitle(`Remove ${base} from ${face(ctx)} everywhere`)
             .setIcon("scissors")
             .onClick(() => this.evictFromContext(ctx, path))
         );

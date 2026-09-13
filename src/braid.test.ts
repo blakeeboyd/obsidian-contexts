@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SpanEvent } from "./recorder";
-import { Rope, Session, assignContexts, buildTimeScale, contextRuns, groupSessions, invertX, scaleX, seamClaims } from "./views";
+import { LogEvent, SpanEvent } from "./recorder";
+import { Rope, Session, applyRenames, assignContexts, buildTimeScale, contextRuns, groupSessions, invertX, scaleX, seamClaims } from "./views";
 
 const MIN = 60_000;
 
@@ -108,6 +108,48 @@ describe("seamClaims", () => {
 
   it("no spans crossed: no claims", () => {
     expect(seamClaims(ropeA, ropeB, ropeB.start)).toEqual([]);
+  });
+
+  it("reassign moves one file's spans in one stretch, overriding declarations and evicts", () => {
+    const a = span("A.md", 0);
+    const b = span("B.md", 10 * MIN);
+    const later = span("A.md", 20 * MIN);
+    const events: LogEvent[] = [
+      { t: 1, type: "context", name: "one" },
+      a,
+      b,
+      later,
+      // "two" must exist (be declared) for evicts and reassigns to name it.
+      { t: 29 * MIN, type: "context", name: "two" },
+      { t: 29 * MIN + 1, type: "context", name: "one" },
+      { t: 30 * MIN, type: "evict", name: "two", path: "A.md" },
+      // The stretch covering only the first A visit moves to two — despite the evict, the later correction wins.
+      { t: 40 * MIN, type: "reassign", path: "A.md", name: "two", from: 0, to: 6 * MIN },
+    ];
+    const ctxOf = assignContexts(events);
+    expect(ctxOf.get(a)).toBe("two");
+    expect(ctxOf.get(b)).toBe("one");
+    expect(ctxOf.get(later)).toBe("one"); // outside the range: untouched
+  });
+
+  it("reassign to '' unassigns; reassigns follow relabels and renames", () => {
+    const a = span("Old.md", 0);
+    const b = span("Old.md", 10 * MIN);
+    const events: LogEvent[] = [
+      { t: 1, type: "context", name: "one" },
+      a,
+      b,
+      { t: 20 * MIN, type: "reassign", path: "Old.md", name: "", from: 0, to: 6 * MIN },
+      { t: 21 * MIN, type: "reassign", path: "Old.md", name: "one", from: 8 * MIN, to: 16 * MIN },
+      { t: 22 * MIN, type: "relabel", from: "one", to: "won" },
+      { t: 23 * MIN, type: "rename", from: "Old.md", to: "New.md" },
+    ];
+    const resolved = applyRenames(events);
+    const ctxOf = assignContexts(resolved);
+    const spans = resolved.filter((ev): ev is SpanEvent => !("type" in ev));
+    expect(ctxOf.get(spans[0] as SpanEvent)).toBeUndefined(); // unassigned
+    expect(ctxOf.get(spans[1] as SpanEvent)).toBe("won"); // reassign rode the relabel
+    expect((spans[0] as SpanEvent).path).toBe("New.md"); // and the rename
   });
 
   it("the braid's grains agree with the log", () => {

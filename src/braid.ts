@@ -1,4 +1,4 @@
-import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { LogEvent, SpanEvent, isSpan } from "./recorder";
 import type ContextsPlugin from "./main";
 import { fmtClock, fmtDelta, fmtDur, relDay } from "./format";
@@ -6,6 +6,7 @@ import {
   Rope,
   SESSION_GAP_PX,
   applyRenames,
+  contextNames,
   assignContexts,
   buildTimeScale,
   contextRuns,
@@ -88,6 +89,36 @@ export class BraidView extends ItemView {
     }
     this.zoom = next;
     void this.render();
+  }
+
+  /**
+   * The correction menu for one file's spans in one stretch: move them to
+   * another context, unassign them, or evict the file from this context for
+   * all time. This is how an old session's wrong-context file gets fixed.
+   */
+  private spanMenu(evt: MouseEvent, ctx: string, path: string, from: number, to: number, names: string[]): void {
+    evt.preventDefault();
+    const menu = new Menu();
+    const base = path.split("/").pop()?.replace(/\.md$/, "");
+    for (const name of names) {
+      if (name === ctx) continue;
+      menu.addItem((i) =>
+        i.setTitle(`Move to ${name}`).setIcon("compass").onClick(() => this.plugin.reassignSpans(path, name, from, to))
+      );
+    }
+    if (ctx) {
+      menu.addItem((i) =>
+        i.setTitle("No context").setIcon("circle-off").onClick(() => this.plugin.reassignSpans(path, "", from, to))
+      );
+      menu.addSeparator();
+      menu.addItem((i) =>
+        i
+          .setTitle(`Remove ${base} from ${ctx} everywhere`)
+          .setIcon("scissors")
+          .onClick(() => this.plugin.evictFromContext(ctx, path))
+      );
+    }
+    menu.showAtMouseEvent(evt);
   }
 
   /** Plain click selects the thread; ⌘-click opens the file (new tab, Obsidian convention). */
@@ -192,6 +223,7 @@ export class BraidView extends ItemView {
       return;
     }
     const ctxOf = assignContexts(relEvents);
+    const names = contextNames(relEvents);
     const ropes = contextRuns(sessions, ctxOf);
     const pxPerMin = 3 * this.zoom;
     const ts = buildTimeScale(sessions, pxPerMin);
@@ -390,8 +422,9 @@ export class BraidView extends ItemView {
             pill.style.fill = colorOf(r.ctx);
             pill.style.stroke = colorOf(r.ctx);
             if (this.selected?.ctx === r.ctx && this.selected.path === path) pill.addClass("is-selected");
-            title(pill, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)}`);
+            title(pill, `${path} · ${fmtClock(t0)} → ${fmtClock(t1)} — right-click to move`);
             pill.addEventListener("click", (evt) => this.threadClick(evt, r.ctx, path));
+            pill.addEventListener("contextmenu", (evt) => this.spanMenu(evt, r.ctx, path, t0, t1, names));
           }
           // Beads: edits. Junction rings: arrivals via a followed link.
           for (const sp of spans) {

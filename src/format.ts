@@ -150,6 +150,7 @@ export function fmtEvent(ev: LogEvent): string {
       : ev.type === "peek" ? `peeked: ${ev.path} ← ${ev.from}`
       : ev.type === "evict" ? `removed from context: ${ev.path} ✗ ${ev.name}`
       : ev.type === "note" ? `note${ev.by ? ` by ${ev.by}` : ""}: ${ev.text}${ev.path ? ` (${ev.path})` : ""}`
+      : ev.type === "reassign" ? `${ev.name ? `moved to ${ev.name}` : "unassigned"}: ${ev.path} (${fmtTime(ev.from)} → ${fmtTime(ev.to)})`
       : `${ev.by ? `edit by ${ev.by}` : "external edit"}: ${ev.path}${ev.edit ? ` (${fmtDeltaVerbose(ev.edit).split("\n").join("; ")})` : ""}`;
     return `${fmtTime(ev.t)}           ${desc}`;
   }

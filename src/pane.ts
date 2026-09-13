@@ -345,6 +345,7 @@ export class ContextsPane extends ItemView {
           : ev.type === "peek" ? ["glasses", `previewed from ${ev.from.split("/").pop()?.replace(/\.md$/, "") ?? ev.from}`]
           : ev.type === "evict" ? ["scissors", `removed from ${ev.name}`]
           : ev.type === "note" ? ["message-circle", ev.by ? `note by ${ev.by}` : "waypoint note"]
+          : ev.type === "reassign" ? ["shuffle", ev.name ? `moved to ${ev.name}` : "unassigned"]
           : ["arrow-right-left", "renamed"];
         const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
         line.createSpan({ text: `${fmtTime(ev.t)} · ` });

@@ -424,6 +424,13 @@ export default class ContextsPlugin extends Plugin {
     new Notice(frag, 6000);
   }
 
+  /** Retroactive per-file correction from the braid: these spans belong to `name` ("" = none), whatever was declared. */
+  reassignSpans(path: string, name: string, from: number, to: number): void {
+    this.enqueue(() => this.record({ t: Date.now(), type: "reassign", path, name, from, to }));
+    const base = path.split("/").pop();
+    new Notice(name ? `Moved to ${name}: ${base}` : `Unassigned: ${base}`);
+  }
+
   /** The user's judgment that a file does not belong to a context: a logged evict event, honored at read time for all of the file's spans there. */
   evictFromContext(name: string, path: string): void {
     this.enqueue(() => this.record({ t: Date.now(), type: "evict", name, path }));

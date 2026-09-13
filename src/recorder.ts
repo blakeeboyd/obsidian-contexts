@@ -490,6 +490,24 @@ export interface NoteEvent {
   by?: string;
 }
 
+/**
+ * The user's retroactive judgment about ONE FILE's spans in one stretch of
+ * time: they belong to `name` ("" = no context), whatever the declarations
+ * said. The most specific correction wins — applied after declaration
+ * assignment and evictions, later reassigns over earlier. This is the
+ * braid's "that file shouldn't be in that context in that old session"
+ * gesture; the seam moves everyone at a boundary, evict removes a file
+ * from a context for all time, reassign moves one file for one stretch.
+ */
+export interface ReassignEvent {
+  t: number;
+  type: "reassign";
+  path: string;
+  name: string;
+  from: number;
+  to: number;
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -503,7 +521,8 @@ export type LogEvent =
   | RelabelEvent
   | PeekEvent
   | EvictEvent
-  | NoteEvent;
+  | NoteEvent
+  | ReassignEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

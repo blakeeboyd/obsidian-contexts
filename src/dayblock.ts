@@ -9,7 +9,7 @@
 import { MarkdownRenderChild, setIcon } from "obsidian";
 import { fmtClock, fmtDelta, fmtDur } from "./format";
 import type ContextsPlugin from "./main";
-import { applyRenames, excludeFolders, groupSessions, healRenames, mergeDeltas } from "./views";
+import { applyErasures, applyRenames, excludeFolders, groupSessions, healRenames, mergeDeltas } from "./views";
 import { EditDelta, isSpan } from "./recorder";
 
 export class DayBlock extends MarkdownRenderChild {
@@ -48,7 +48,7 @@ export class DayBlock extends MarkdownRenderChild {
     el.addClass("contexts-pane", "contexts-day-block");
     const s = this.plugin.settings;
     // Day views show everything logged; exclusion only gates contexts and relatedness.
-    const events = applyRenames(healRenames(await this.plugin.getEvents()));
+    const events = applyErasures(applyRenames(healRenames(await this.plugin.getEvents())));
     const dayStart = this.resolveDayStart();
     const dayEnd = dayStart + 24 * 3600_000;
     const dayEvents = events.filter((ev) => ev.t >= dayStart && ev.t < dayEnd);

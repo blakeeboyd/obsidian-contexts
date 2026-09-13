@@ -10,6 +10,7 @@ import {
   Session,
   UNRELATED_WEIGHT,
   allRelationships,
+  applyErasures,
   applyRenames,
   coalesceTrail,
   assignContexts,
@@ -169,7 +170,7 @@ export class ContextsPane extends ItemView {
     // views, but cannot belong to contexts or relatedness — so the full
     // stream feeds trails, and the excluded stream feeds everything that
     // connects files to each other.
-    const events = applyRenames(healRenames(await this.plugin.getEvents()));
+    const events = applyErasures(applyRenames(healRenames(await this.plugin.getEvents())));
     const relEvents = excludeFolders(events, s.excludedFolders);
     const sessions = groupSessions(relEvents, s.sessionGapMin * 60_000);
 

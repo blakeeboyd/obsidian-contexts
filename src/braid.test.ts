@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
-import { Rope, Session, applyRenames, assignContexts, buildTimeScale, contextRuns, groupSessions, invertX, scaleX, seamClaims } from "./views";
+import { Rope, Session, applyErasures, applyRenames, assignContexts, buildTimeScale, contextRuns, groupSessions, invertX, scaleX, seamClaims } from "./views";
 
 const MIN = 60_000;
 
@@ -150,6 +150,27 @@ describe("seamClaims", () => {
     expect(ctxOf.get(spans[0] as SpanEvent)).toBeUndefined(); // unassigned
     expect(ctxOf.get(spans[1] as SpanEvent)).toBe("won"); // reassign rode the relabel
     expect((spans[0] as SpanEvent).path).toBe("New.md"); // and the rename
+  });
+
+  it("erase drops covered spans and its own tombstone; erasures follow renames", () => {
+    const a = span("Old.md", 0);
+    const b = span("Old.md", 10 * MIN);
+    const other = span("Other.md", 2 * MIN);
+    const events: LogEvent[] = [
+      a,
+      other,
+      b,
+      { t: 20 * MIN, type: "rename", from: "Old.md", to: "New.md" },
+      // Recorded after the rename, so it names the new path; must still hit the old spans.
+      { t: 21 * MIN, type: "erase", path: "New.md", from: 0, to: 6 * MIN },
+    ];
+    const visible = applyErasures(applyRenames(events));
+    const spans = visible.filter((ev): ev is SpanEvent => !("type" in ev));
+    expect(spans.map((sp) => [sp.path, sp.start])).toEqual([
+      ["Other.md", 2 * MIN],
+      ["New.md", 10 * MIN],
+    ]);
+    expect(visible.some((ev) => "type" in ev && ev.type === "erase")).toBe(false);
   });
 
   it("the braid's grains agree with the log", () => {

@@ -39,6 +39,7 @@ import {
   ANON_CONTEXT_RE,
   ContextSet,
   allRelationships,
+  applyErasures,
   applyRenames,
   assignContexts,
   contextFileSets,
@@ -351,7 +352,7 @@ export default class ContextsPlugin extends Plugin {
     if (via !== "auto") {
       const path = this.recorder.activePath ?? this.lastActiveMdPath;
       if (path) {
-        const runStart = fileRunStart(applyRenames(this.events ?? []), path, this.settings.sessionGapMin * 60_000, now);
+        const runStart = fileRunStart(applyErasures(applyRenames(this.events ?? [])), path, this.settings.sessionGapMin * 60_000, now);
         const openSpan = this.recorder.activePath === path ? this.lastActivationAt : null;
         const covers = Math.min(runStart ?? Infinity, openSpan ?? Infinity);
         if (covers < now) ev.covers = covers;
@@ -386,7 +387,7 @@ export default class ContextsPlugin extends Plugin {
         }
         if (isSpan(ev) && ev.path !== path) break; // worked elsewhere since: normal rules
       }
-      const relEvents = excludeFolders(applyRenames(healRenames(events)), this.settings.excludedFolders);
+      const relEvents = excludeFolders(applyErasures(applyRenames(healRenames(events))), this.settings.excludedFolders);
       const threads = fileContexts(relEvents, path);
       const home = threads[0];
       const ctx = currentContext(relEvents);
@@ -461,8 +462,25 @@ export default class ContextsPlugin extends Plugin {
             .onClick(() => this.evictFromContext(ctx, path))
         );
       }
+      menu.addSeparator();
+      menu.addItem((i) =>
+        i
+          .setTitle("Delete these visits from the record")
+          .setIcon("trash-2")
+          .onClick(() => this.eraseSpans(path, from, to))
+      );
       menu.showAtMouseEvent(evt);
     })();
+  }
+
+  /**
+   * Read-time deletion: these visits vanish from every view. The append-only
+   * log keeps them under an erase tombstone, so hand-removing the tombstone
+   * line from the shard restores them.
+   */
+  eraseSpans(path: string, from: number, to: number): void {
+    this.enqueue(() => this.record({ t: Date.now(), type: "erase", path, from, to }));
+    new Notice(`Deleted visits: ${path.split("/").pop()}`);
   }
 
   /** Retroactive per-file correction from the braid: these spans belong to `name` ("" = none), whatever was declared. */
@@ -484,7 +502,7 @@ export default class ContextsPlugin extends Plugin {
       new Notice("Contexts: open a file first.");
       return;
     }
-    const relEvents = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const relEvents = excludeFolders(applyErasures(applyRenames(healRenames(await this.getEvents()))), this.settings.excludedFolders);
     const threads = fileContexts(relEvents, path);
     if (!threads.length) {
       new Notice("Contexts: this file belongs to no context.");
@@ -658,7 +676,7 @@ export default class ContextsPlugin extends Plugin {
     const iso = file.basename.match(/\d{4}-\d{2}-\d{2}/)?.[0];
     const d = iso ? new Date(`${iso}T00:00:00`) : new Date();
     const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const events = applyRenames(healRenames(await this.getEvents()));
+    const events = applyErasures(applyRenames(healRenames(await this.getEvents())));
     const body = dailyMarkdown(events, dayStart, dayStart + 24 * 3600_000, this.settings.sessionGapMin * 60_000);
     await this.app.vault.process(file, (content) => upsertDaySection(content, body));
     new Notice("Contexts: day summary inserted.");
@@ -745,7 +763,7 @@ export default class ContextsPlugin extends Plugin {
         try {
           const refs = extractRefs(stripCodeFences(await this.app.vault.cachedRead(file)));
           const current = new Set([...refs.links, ...refs.embeds]);
-          const known = knownLinks(applyRenames(await this.getEvents()), file.path);
+          const known = knownLinks(applyErasures(applyRenames(await this.getEvents())), file.path);
           const added = [...current].filter((l) => !known.has(l));
           const removed = [...known].filter((l) => !current.has(l));
           if (added.length || removed.length) {
@@ -909,7 +927,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async showRelationships(): Promise<void> {
-    const events = excludeFolders(applyRenames(healRenames(await this.getEvents())), this.settings.excludedFolders);
+    const events = excludeFolders(applyErasures(applyRenames(healRenames(await this.getEvents()))), this.settings.excludedFolders);
     const sessions = groupSessions(events, this.settings.sessionGapMin * 60_000);
     const pairs = allRelationships(
       sessions,
@@ -924,7 +942,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async dumpHistory(): Promise<void> {
-    const events = applyRenames(healRenames(await this.getEvents()));
+    const events = applyErasures(applyRenames(healRenames(await this.getEvents())));
     if (!events.length) {
       new HistoryModal(this.app, "No events recorded yet. Work in some notes and come back.").open();
       return;

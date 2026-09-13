@@ -508,6 +508,21 @@ export interface ReassignEvent {
   to: number;
 }
 
+/**
+ * Read-time deletion: the user judged these recorded visits should not be
+ * part of the record's views. The log itself keeps everything (append-only,
+ * irreplaceable memory) — an erase is a tombstone honored at read time, so
+ * removing the tombstone line restores the visits. Spans of `path` with
+ * t in [from, to] vanish from every derived view.
+ */
+export interface EraseEvent {
+  t: number;
+  type: "erase";
+  path: string;
+  from: number;
+  to: number;
+}
+
 export type LogEvent =
   | SpanEvent
   | RenameEvent
@@ -522,7 +537,8 @@ export type LogEvent =
   | PeekEvent
   | EvictEvent
   | NoteEvent
-  | ReassignEvent;
+  | ReassignEvent
+  | EraseEvent;
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

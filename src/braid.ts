@@ -5,6 +5,7 @@ import { fmtClock, fmtDelta, fmtDur, relDay } from "./format";
 import {
   Rope,
   SESSION_GAP_PX,
+  applyErasures,
   applyRenames,
   assignContexts,
   buildTimeScale,
@@ -184,7 +185,7 @@ export class BraidView extends ItemView {
 
     const s = this.plugin.settings;
     const gapMs = s.sessionGapMin * 60_000;
-    const events = applyRenames(healRenames(await this.plugin.getEvents()));
+    const events = applyErasures(applyRenames(healRenames(await this.plugin.getEvents())));
     const relEvents = excludeFolders(events, s.excludedFolders);
     const sessions = groupSessions(relEvents, gapMs);
     if (!sessions.length) {

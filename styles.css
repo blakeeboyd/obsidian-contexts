@@ -562,12 +562,28 @@
 }
 
 .contexts-braid-detail-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-faint);
   margin: 10px 0 4px;
+}
+
+.contexts-braid-detail-day-clickable {
+  cursor: pointer;
+}
+
+.contexts-braid-detail-day-clickable:hover {
+  color: var(--text-normal);
+}
+
+.contexts-braid-detail-day-menu {
+  display: inline-flex;
+  opacity: 0.7;
 }
 
 .contexts-braid-detail-row {

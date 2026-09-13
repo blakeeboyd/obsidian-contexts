@@ -289,6 +289,14 @@ export class ContextsPane extends ItemView {
         setIcon(line.createSpan({ cls: "contexts-chip-icon" }), ev.edit ? "pencil" : "book-open");
         line.createSpan({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}` });
         if (ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
+        // The same correction menu as the braid's pills: right-click a stint
+        // to move its visits to another context. Excluded files have no
+        // membership to correct.
+        if (!excludedBy) {
+          row.addEventListener("contextmenu", (evt) =>
+            this.plugin.openSpanMenu(evt, stintCtx ?? "", path, ev.start, ev.end)
+          );
+        }
         // Click to expand: every visit, chronological — time, length, what changed then.
         const details = row.createDiv({ cls: "contexts-trail-details" });
         details.createDiv({

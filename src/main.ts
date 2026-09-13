@@ -1,4 +1,4 @@
-import { App, EventRef, FuzzySuggestModal, MarkdownView, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
+import { App, EventRef, FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId } from "./log";
 import { DayBlock } from "./dayblock";
@@ -422,6 +422,39 @@ export default class ContextsPlugin extends Plugin {
     link.addEventListener("click", () => this.declareContext(restoreTo));
     frag.append(link);
     new Notice(frag, 6000);
+  }
+
+  /**
+   * The correction menu shared by braid pills and pane trail stints: move
+   * these spans to another context, unassign them, or evict the file from
+   * the context for all time.
+   */
+  openSpanMenu(evt: MouseEvent, ctx: string, path: string, from: number, to: number): void {
+    evt.preventDefault();
+    void (async () => {
+      const names = contextNames(excludeFolders(await this.getEvents(), this.settings.excludedFolders));
+      const menu = new Menu();
+      const base = path.split("/").pop()?.replace(/\.md$/, "");
+      for (const name of names) {
+        if (name === ctx) continue;
+        menu.addItem((i) =>
+          i.setTitle(`Move to ${name}`).setIcon("compass").onClick(() => this.reassignSpans(path, name, from, to))
+        );
+      }
+      if (ctx) {
+        menu.addItem((i) =>
+          i.setTitle("No context").setIcon("circle-off").onClick(() => this.reassignSpans(path, "", from, to))
+        );
+        menu.addSeparator();
+        menu.addItem((i) =>
+          i
+            .setTitle(`Remove ${base} from ${ctx} everywhere`)
+            .setIcon("scissors")
+            .onClick(() => this.evictFromContext(ctx, path))
+        );
+      }
+      menu.showAtMouseEvent(evt);
+    })();
   }
 
   /** Retroactive per-file correction from the braid: these spans belong to `name` ("" = none), whatever was declared. */

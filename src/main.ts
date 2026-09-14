@@ -639,6 +639,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   onunload() {
+    if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     // Fire-and-forget: usually completes before the process is gone, and the
     // reader survives a truncated final line if it doesn't.
     this.enqueue(() => this.closeSpan(undefined, "quit"));
@@ -662,6 +663,12 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private dayBlocks = new Set<DayBlock>();
+  private refreshTimer: number | null = null;
+
+  /** The plugin's own views announce the opens they cause, so the record knows the arrival surface. */
+  noteUiOpen(via: OpenMethod): void {
+    this.lastUiOpen = { via, t: Date.now() };
+  }
 
   registerDayBlock(block: DayBlock): void {
     this.dayBlocks.add(block);
@@ -671,16 +678,27 @@ export default class ContextsPlugin extends Plugin {
     this.dayBlocks.delete(block);
   }
 
+  /**
+   * Coalesced view refresh. A folder delete fires one vault event per file,
+   * and rendering pane + braid + map + day blocks on EVERY logged event ran
+   * the full heal/apply/assign pipeline N × views times in a burst — enough
+   * to freeze the app. One trailing render per burst is indistinguishable
+   * to the eye and O(1) instead of O(N).
+   */
   private refreshPane(): void {
-    // A restored-but-unvisited tab holds a deferred placeholder view with no
-    // render(); it draws itself when revealed, so skipping it is correct.
-    for (const type of [CONTEXTS_VIEW_TYPE, BRAID_VIEW_TYPE, MAP_VIEW_TYPE]) {
-      for (const leaf of this.app.workspace.getLeavesOfType(type)) {
-        const view = leaf.view as unknown as { render?: () => Promise<void> };
-        if (typeof view.render === "function") void view.render();
+    if (this.refreshTimer !== null) return;
+    this.refreshTimer = window.setTimeout(() => {
+      this.refreshTimer = null;
+      // A restored-but-unvisited tab holds a deferred placeholder view with
+      // no render(); it draws itself when revealed, so skipping it is correct.
+      for (const type of [CONTEXTS_VIEW_TYPE, BRAID_VIEW_TYPE, MAP_VIEW_TYPE]) {
+        for (const leaf of this.app.workspace.getLeavesOfType(type)) {
+          const view = leaf.view as unknown as { render?: () => Promise<void> };
+          if (typeof view.render === "function") void view.render();
+        }
       }
-    }
-    for (const block of this.dayBlocks) void block.render();
+      for (const block of this.dayBlocks) void block.render();
+    }, 250);
   }
 
   /**
@@ -1150,7 +1168,7 @@ class EvictModal extends FuzzySuggestModal<string> {
 }
 
 /** Step two: type the new name. Enter confirms, Escape cancels. */
-class NameModal extends Modal {
+export class NameModal extends Modal {
   constructor(
     app: App,
     private title: string,

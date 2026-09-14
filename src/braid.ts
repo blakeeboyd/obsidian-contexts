@@ -96,7 +96,10 @@ export class BraidView extends ItemView {
   private threadClick(evt: MouseEvent, ctx: string, path: string): void {
     if (Keymap.isModifier(evt, "Mod")) {
       const file = this.app.vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      if (file instanceof TFile) {
+        this.plugin.noteUiOpen("braid"); // the record should know arrivals from the braid
+        void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      }
       return;
     }
     this.selected = this.selected?.ctx === ctx && this.selected.path === path ? null : { ctx, path };
@@ -544,7 +547,10 @@ export class BraidView extends ItemView {
     const openLink = head.createDiv({ text: "Open file", cls: "contexts-braid-detail-open" });
     openLink.addEventListener("click", (evt) => {
       const file = this.app.vault.getAbstractFileByPath(sel.path);
-      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      if (file instanceof TFile) {
+        this.plugin.noteUiOpen("braid");
+        void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      }
     });
 
     const list = panel.createDiv({ cls: "contexts-braid-detail-list" });

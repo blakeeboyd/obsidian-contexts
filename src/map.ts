@@ -1,5 +1,6 @@
 import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type ContextsPlugin from "./main";
+import { NameModal } from "./main";
 import { PALETTE, UNASSIGNED_COLOR } from "./braid";
 import { fmtClock, fmtDur, relDay } from "./format";
 import { HoverTip } from "./tip";
@@ -59,6 +60,10 @@ export class MapView extends ItemView {
   // read-only file that led somewhere is a waypoint that keeps its label —
   // the clutter is labels on drive-by leaves, not reading itself.
   private compactReads = false;
+  // Engagement wash: each pill tinted its context color, deeper with more
+  // engaged time, so the worked-in files catch the eye first.
+  private showEngagement = true;
+  private customDays = 7;
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -95,7 +100,10 @@ export class MapView extends ItemView {
   private nodeClick(evt: MouseEvent, path: string): void {
     if (Keymap.isModifier(evt, "Mod")) {
       const file = this.app.vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      if (file instanceof TFile) {
+        this.plugin.noteUiOpen("map"); // the record should know arrivals from the map
+        void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      }
       return;
     }
     this.selected = this.selected === path ? null : path;
@@ -198,7 +206,32 @@ export class MapView extends ItemView {
       group("A tree per session", "session");
       group("A tree per day", "day");
       group("A tree per week", "week");
+      group("A tree per month", "month");
+      menu.addItem((i) =>
+        i
+          .setTitle(`A tree per ${this.customDays} days (custom)…`)
+          .setChecked(this.groupBy === "custom")
+          .onClick(() => {
+            new NameModal(this.app, "Days per tree:", String(this.customDays), (v) => {
+              const n = parseInt(v, 10);
+              if (!Number.isFinite(n) || n < 1) return;
+              this.customDays = n;
+              this.groupBy = "custom";
+              this.manualVB = null;
+              void this.render();
+            }).open();
+          })
+      );
       menu.addSeparator();
+      menu.addItem((i) =>
+        i
+          .setTitle("Show engagement")
+          .setChecked(this.showEngagement)
+          .onClick(() => {
+            this.showEngagement = !this.showEngagement;
+            void this.render();
+          })
+      );
       menu.addItem((i) =>
         i
           .setTitle("Compact read-only leaves")
@@ -237,7 +270,7 @@ export class MapView extends ItemView {
       if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
-    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy);
+    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy, this.customDays);
     if (this.newestFirst) trees.reverse();
     if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
@@ -337,6 +370,11 @@ export class MapView extends ItemView {
       }
     }
 
+    // Engagement scale: global across the forest, so a heavy day doesn't
+    // make a light day's files look important by local comparison.
+    let maxDur = 1;
+    for (const { pos } of placements) for (const n of pos.keys()) maxDur = Math.max(maxDur, n.dur);
+
     const main = contentEl.createDiv({ cls: "contexts-braid-main" });
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
     this.svgEl = svg;
@@ -432,9 +470,16 @@ export class MapView extends ItemView {
       const line1 =
         this.groupBy === "week"
           ? `Week of ${new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}`
+          : this.groupBy === "month"
+          ? d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
           : relDay(tree.start);
       label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = line1;
-      const line2 = this.groupBy === "week" ? relDay(tree.start) : fmtClock(tree.start);
+      const line2 =
+        this.groupBy === "week" || this.groupBy === "month"
+          ? relDay(tree.start)
+          : this.groupBy === "custom"
+          ? `${this.customDays}-day span`
+          : fmtClock(tree.start);
       label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
 
       // Hover wiring: every edge registers with both endpoints, so mousing
@@ -506,14 +551,22 @@ export class MapView extends ItemView {
         if (onTrail(n.path)) g.addClass("is-trail");
         if (n.path === current && tree === trailTree) g.addClass("is-current");
         if (n.path === this.selected) g.addClass("is-selected");
+        const heat = Math.sqrt(n.dur / maxDur);
         if (isCompact(n)) {
           // A drive-by read: structure without a label. Hover says the rest.
           g.addClass("is-mini");
-          g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r: 5 }, cls: "contexts-map-mini" }).style.fill =
+          const r = this.showEngagement ? 4 + 3 * heat : 5;
+          g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r }, cls: "contexts-map-mini" }).style.fill =
             colorOf(n.ctx);
         } else {
           const h = heightOf(n.path);
-          g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
+          const rect = g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
+          // The engagement wash: context color, deeper with engaged time.
+          // The current file keeps its accent wash instead.
+          if (this.showEngagement && !(n.path === current && tree === trailTree)) {
+            rect.style.fill = colorOf(n.ctx);
+            rect.style.fillOpacity = `${0.05 + 0.3 * heat}`;
+          }
           g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
             colorOf(n.ctx);
           const lines = linesOf(n.path);
@@ -622,7 +675,10 @@ export class MapView extends ItemView {
     const openLink = head.createDiv({ text: "Open file", cls: "contexts-braid-detail-open" });
     openLink.addEventListener("click", (evt) => {
       const file = this.app.vault.getAbstractFileByPath(path);
-      if (file instanceof TFile) void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      if (file instanceof TFile) {
+        this.plugin.noteUiOpen("map");
+        void this.app.workspace.getLeaf(Keymap.isModEvent(evt)).openFile(file);
+      }
     });
 
     const list = panel.createDiv({ cls: "contexts-braid-detail-list" });

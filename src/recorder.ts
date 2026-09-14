@@ -312,7 +312,7 @@ export interface SpanEvent {
 export type LeaveReason = "switch" | "close" | "blur" | "idle" | "quit" | "pause";
 // ponytail: "switcher" is any SuggestModal selection — quick switcher in
 // practice, but command-palette file opens land there too.
-export type OpenMethod = "link" | "explorer" | "search" | "switcher";
+export type OpenMethod = "link" | "explorer" | "search" | "switcher" | "map" | "braid";
 
 export interface Opened {
   via: OpenMethod;

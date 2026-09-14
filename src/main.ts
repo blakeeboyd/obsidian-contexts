@@ -197,7 +197,8 @@ export default class ContextsPlugin extends Plugin {
           // span discarded, or switching between full views): general mode
           // over a braid/map tab, file mode over a note.
           for (const leaf of this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)) {
-            void (leaf.view as ContextsPane).render();
+            const view = leaf.view as unknown as { render?: () => Promise<void> };
+            if (typeof view.render === "function") void view.render();
           }
         })
       );
@@ -671,14 +672,13 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private refreshPane(): void {
-    for (const leaf of this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)) {
-      void (leaf.view as ContextsPane).render();
-    }
-    for (const leaf of this.app.workspace.getLeavesOfType(BRAID_VIEW_TYPE)) {
-      void (leaf.view as BraidView).render();
-    }
-    for (const leaf of this.app.workspace.getLeavesOfType(MAP_VIEW_TYPE)) {
-      void (leaf.view as MapView).render();
+    // A restored-but-unvisited tab holds a deferred placeholder view with no
+    // render(); it draws itself when revealed, so skipping it is correct.
+    for (const type of [CONTEXTS_VIEW_TYPE, BRAID_VIEW_TYPE, MAP_VIEW_TYPE]) {
+      for (const leaf of this.app.workspace.getLeavesOfType(type)) {
+        const view = leaf.view as unknown as { render?: () => Promise<void> };
+        if (typeof view.render === "function") void view.render();
+      }
     }
     for (const block of this.dayBlocks) void block.render();
   }

@@ -719,3 +719,11 @@
   background: var(--background-secondary);
   border-radius: 4px;
 }
+
+.contexts-map-svg {
+  cursor: grab;
+}
+
+.contexts-map-svg:active {
+  cursor: grabbing;
+}

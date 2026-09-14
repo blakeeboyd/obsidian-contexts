@@ -51,6 +51,11 @@ export class MapView extends ItemView {
   private tips = new HoverTip();
   private raf = 0;
   private alpha = 0;
+  private svgEl: SVGSVGElement | null = null;
+  // Auto-fit bounds, updated every sim frame; the untouched view tracks them.
+  private fitVB = { x: -100, y: -100, w: 200, h: 200 };
+  // A zoom or pan freezes the viewport here (kept across re-renders); Fit clears it.
+  private manualVB: { x: number; y: number; w: number; h: number } | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: ContextsPlugin) {
     super(leaf);
@@ -88,6 +93,33 @@ export class MapView extends ItemView {
     void this.render();
   }
 
+  private applyVB(): void {
+    const vb = this.manualVB ?? this.fitVB;
+    this.svgEl?.setAttribute("viewBox", `${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`);
+  }
+
+  /** Client px → viewBox coordinates (getScreenCTM handles the meet letterboxing). */
+  private clientToVB(x: number, y: number): DOMPoint | null {
+    const m = this.svgEl?.getScreenCTM();
+    return m ? new DOMPoint(x, y).matrixTransform(m.inverse()) : null;
+  }
+
+  /** Zoom about an anchor: the point under the cursor (viewport center when null) stays put. */
+  private zoomBy(factor: number, clientX: number | null, clientY: number | null): void {
+    const svg = this.svgEl;
+    if (!svg) return;
+    const cur = this.manualVB ?? this.fitVB;
+    // Clamp relative to fit: 16x in, 2x out — beyond fit there is only void.
+    const w = Math.min(Math.max(cur.w / factor, this.fitVB.w / 16), this.fitVB.w * 2);
+    if (w === cur.w) return;
+    const rect = svg.getBoundingClientRect();
+    const p = this.clientToVB(clientX ?? rect.left + rect.width / 2, clientY ?? rect.top + rect.height / 2);
+    if (!p) return;
+    const k = w / cur.w;
+    this.manualVB = { x: p.x - (p.x - cur.x) * k, y: p.y - (p.y - cur.y) * k, w, h: cur.h * k };
+    this.applyVB();
+  }
+
   async render(): Promise<void> {
     cancelAnimationFrame(this.raf);
     const { contentEl } = this;
@@ -123,8 +155,21 @@ export class MapView extends ItemView {
         void this.render();
       });
     }
+    const zoomWrap = header.createDiv({ cls: "contexts-braid-zoom" });
+    const zoomBtn = (icon: string, label: string, onClick: () => void) => {
+      const b = zoomWrap.createEl("button", { cls: "contexts-braid-seg-btn" });
+      setIcon(b, icon);
+      b.setAttribute("aria-label", label);
+      b.addEventListener("click", onClick);
+    };
+    zoomBtn("zoom-out", "Zoom out", () => this.zoomBy(1 / 1.5, null, null));
+    zoomBtn("zoom-in", "Zoom in", () => this.zoomBy(1.5, null, null));
+    zoomBtn("maximize", "Fit", () => {
+      this.manualVB = null;
+      this.applyVB();
+    });
     header.createSpan({
-      text: "click a node for its detail · ⌘-click opens the file",
+      text: "click a node for its detail · ⌘-click opens the file · ⌘-scroll zooms · drag pans",
       cls: "contexts-braid-hint",
     });
 
@@ -159,11 +204,49 @@ export class MapView extends ItemView {
 
     const main = contentEl.createDiv({ cls: "contexts-braid-main" });
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
+    this.svgEl = svg;
+    let panned = false;
     svg.addEventListener("click", (evt) => {
-      if (evt.target === svg && this.selected) {
+      if (evt.target === svg && this.selected && !panned) {
         this.selected = null;
         void this.render();
       }
+    });
+    svg.addEventListener(
+      "wheel",
+      (evt: WheelEvent) => {
+        // Pinch arrives as ctrl+wheel; ⌘-wheel is the pointer-mouse spelling.
+        if (!evt.ctrlKey && !evt.metaKey) return;
+        evt.preventDefault();
+        this.zoomBy(evt.deltaY < 0 ? 1.25 : 0.8, evt.clientX, evt.clientY);
+      },
+      { passive: false }
+    );
+    // Background drag pans. Keeping the grabbed point under the cursor each
+    // move makes the pan exact at any zoom; a pan freezes the auto-fit.
+    svg.addEventListener("pointerdown", (evt: PointerEvent) => {
+      if (evt.button !== 0 || evt.target !== svg) return;
+      const grab = this.clientToVB(evt.clientX, evt.clientY);
+      if (!grab) return;
+      panned = false;
+      svg.setPointerCapture(evt.pointerId);
+      const move = (mv: PointerEvent) => {
+        const p = this.clientToVB(mv.clientX, mv.clientY);
+        if (!p) return;
+        const cur = this.manualVB ?? (this.manualVB = { ...this.fitVB });
+        cur.x += grab.x - p.x;
+        cur.y += grab.y - p.y;
+        panned = true;
+        this.applyVB();
+      };
+      const up = () => {
+        svg.removeEventListener("pointermove", move);
+        svg.removeEventListener("pointerup", up);
+        svg.removeEventListener("pointercancel", up);
+      };
+      svg.addEventListener("pointermove", move);
+      svg.addEventListener("pointerup", up);
+      svg.addEventListener("pointercancel", up);
     });
 
     const edgeEls: { el: SVGLineElement; a: string; b: string }[] = [];
@@ -209,8 +292,8 @@ export class MapView extends ItemView {
         const p = this.pos.get(path)!;
         g.setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
       }
-      // Auto-fit: the viewBox tracks the settled bounds. No pan/zoom until
-      // the node cap makes fit-to-all unreadable.
+      // Auto-fit bounds track the settled layout; the viewBox follows them
+      // until a zoom or pan freezes a manual viewport.
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const p of paths) {
         const n = this.pos.get(p)!;
@@ -220,7 +303,8 @@ export class MapView extends ItemView {
         x1 = Math.max(x1, n.x + r + 90); // room for labels
         y1 = Math.max(y1, n.y + r);
       }
-      svg.setAttribute("viewBox", `${x0.toFixed(0)} ${y0.toFixed(0)} ${Math.max(x1 - x0, 200).toFixed(0)} ${Math.max(y1 - y0, 200).toFixed(0)}`);
+      this.fitVB = { x: x0, y: y0, w: Math.max(x1 - x0, 200), h: Math.max(y1 - y0, 200) };
+      this.applyVB();
     };
 
     // Settle incrementally: hot start only when new nodes arrived, warm otherwise.

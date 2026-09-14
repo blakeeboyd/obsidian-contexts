@@ -2,6 +2,8 @@ import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } fro
 import { isSpan } from "./recorder";
 import type { EditDelta, LogEvent, PeekEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
+import { BRAID_VIEW_TYPE } from "./braid";
+import { MAP_VIEW_TYPE } from "./map";
 import type ContextsPlugin from "./main";
 import {
   ContextSet,
@@ -175,11 +177,13 @@ export class ContextsPane extends ItemView {
     const sessions = groupSessions(relEvents, s.sessionGapMin * 60_000);
 
     // Sticky path only counts while a note is actually open somewhere AND
-    // the main area isn't showing an empty "New tab" — close everything (or
-    // open a fresh tab) and the pane falls back to the sessions view.
+    // the main area isn't showing an empty "New tab" or one of this plugin's
+    // own full views (braid, file map) — there the pane goes general: the
+    // user is looking at the whole record, not at a file.
     const anyNoteOpen = this.app.workspace.getLeavesOfType("markdown").length > 0;
-    const mainIsEmpty = this.app.workspace.getMostRecentLeaf()?.view.getViewType() === "empty";
-    const path = anyNoteOpen && !mainIsEmpty ? this.plugin.lastActiveMdPath : null;
+    const mainType = this.app.workspace.getMostRecentLeaf()?.view.getViewType();
+    const mainIsGeneral = mainType === "empty" || mainType === BRAID_VIEW_TYPE || mainType === MAP_VIEW_TYPE;
+    const path = anyNoteOpen && !mainIsGeneral ? this.plugin.lastActiveMdPath : null;
     const excludedBy = path ? s.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
 
     // The declared context, always visible, one click to switch — the cheap

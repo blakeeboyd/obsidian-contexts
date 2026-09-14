@@ -39,7 +39,7 @@ const NODE_H = 24;
 const MAX_LABEL_W = 180;
 
 /**
- * The cognition map: how the user moved through the work. One tree per
+ * The file map: how the user moved through the work. One tree per
  * session, rooted at the session's first note, children in visit order —
  * what was opened from where, what was written (edited files read bold),
  * with the trail to the current file lit in the accent color. Secondary
@@ -69,7 +69,7 @@ export class MapView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Cognition map";
+    return "File map";
   }
 
   getIcon(): string {

@@ -184,7 +184,7 @@ export default class ContextsPlugin extends Plugin {
     });
     this.addCommand({
       id: "open-map",
-      name: "Open cognition map",
+      name: "Open file map",
       callback: () => void this.activateFullView(MAP_VIEW_TYPE),
     });
 
@@ -193,6 +193,12 @@ export default class ContextsPlugin extends Plugin {
         this.app.workspace.on("active-leaf-change", () => {
           this.bumpActivity();
           this.enqueue(() => this.onActiveChange());
+          // The pane follows the main area even when nothing records (a tiny
+          // span discarded, or switching between full views): general mode
+          // over a braid/map tab, file mode over a note.
+          for (const leaf of this.app.workspace.getLeavesOfType(CONTEXTS_VIEW_TYPE)) {
+            void (leaf.view as ContextsPane).render();
+          }
         })
       );
       // App loses/regains focus: close the span so time in other apps is not

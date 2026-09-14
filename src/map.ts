@@ -277,7 +277,7 @@ export class MapView extends ItemView {
       );
       menu.addItem((i) =>
         i
-          .setTitle("Compact read-only leaves")
+          .setTitle("Compact brief and read-only visits")
           .setChecked(this.compactReads)
           .onClick(() => {
             this.compactReads = !this.compactReads;
@@ -379,13 +379,17 @@ export class MapView extends ItemView {
     // Stack the session trees; remember where every path last appeared for
     // trails and the detail panel (the latest session is the one that counts).
     const COMPACT_W = 16;
+    // Brief pass-throughs compact even mid-tree: a dot keeps the chain
+    // visible while dropping the label. ponytail: fixed threshold; a
+    // settings knob if 30s turns out to be the wrong line.
+    const BRIEF_MS = 30_000;
     const isCompact = (n: NavNode) =>
       this.compactReads &&
       !n.edits &&
       !n.created &&
-      n.children.length === 0 &&
       n.path !== this.selected &&
-      n.path !== this.plugin.lastActiveMdPath;
+      n.path !== this.plugin.lastActiveMdPath &&
+      (n.children.length === 0 || n.dur < BRIEF_MS);
     const placements: { tree: NavTree; pos: Map<NavNode, { x: number; y: number; w: number }> }[] = [];
     const latestNode = new Map<string, { tree: NavTree; node: NavNode }>();
     let yCursor = 0;

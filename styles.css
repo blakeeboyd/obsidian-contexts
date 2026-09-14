@@ -651,3 +651,71 @@
 .contexts-braid-rail-fold:hover {
   color: var(--text-accent);
 }
+
+/* ── Cognition map ─────────────────────────────────────────────────────── */
+
+.contexts-map-svg {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.contexts-map-select {
+  height: auto;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+}
+
+.contexts-map-edge {
+  stroke: var(--text-faint);
+  fill: none;
+}
+
+.contexts-map-edge.is-peek {
+  stroke-dasharray: 2 3;
+}
+
+.contexts-map-node {
+  cursor: pointer;
+}
+
+.contexts-map-node circle {
+  stroke: transparent;
+  stroke-width: 2px;
+  transition: fill-opacity 0.12s ease, stroke 0.12s ease;
+}
+
+.contexts-map-node:hover circle {
+  fill-opacity: 1 !important;
+}
+
+.contexts-map-node.is-selected circle {
+  stroke: var(--text-normal);
+}
+
+.contexts-map-label {
+  font-size: 10px;
+  fill: var(--text-muted);
+  pointer-events: none;
+}
+
+.contexts-map-node.is-selected .contexts-map-label,
+.contexts-map-node:hover .contexts-map-label {
+  fill: var(--text-normal);
+}
+
+.contexts-map-related {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.contexts-map-related:hover {
+  background: var(--background-secondary);
+  border-radius: 4px;
+}

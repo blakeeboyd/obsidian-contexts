@@ -2,6 +2,7 @@ import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { LogEvent, SpanEvent, isSpan } from "./recorder";
 import type ContextsPlugin from "./main";
 import { fmtClock, fmtDelta, fmtDur, relDay } from "./format";
+import { HoverTip } from "./tip";
 import {
   Rope,
   SESSION_GAP_PX,
@@ -38,7 +39,8 @@ export type Grain = "ropes" | "strands" | "visits";
 
 
 // Context hulls cycle through Obsidian's extended palette; unassigned is gray.
-const PALETTE = [
+// Shared with the cognition map so a context is the same color everywhere.
+export const PALETTE = [
   "var(--color-blue)",
   "var(--color-purple)",
   "var(--color-green)",
@@ -48,7 +50,7 @@ const PALETTE = [
   "var(--color-yellow)",
   "var(--color-red)",
 ];
-const UNASSIGNED_COLOR = "var(--text-faint)";
+export const UNASSIGNED_COLOR = "var(--text-faint)";
 
 /**
  * The braid: the full-view trail visualization. Hull = context, strand =
@@ -59,8 +61,7 @@ export class BraidView extends ItemView {
   private grain: Grain = "strands";
   private dragging = false;
   private renderQueued = false;
-  // One shared styled hover card; SVG <title> gives the OS's slow unstyled tooltip.
-  private tipEl: HTMLElement | null = null;
+  private tips = new HoverTip();
   // Horizontal position, kept across the re-renders every logged event triggers.
   private scrollX: number | null = null;
   // A thread: one file's presence in one context. Click selects; ⌘-click opens the file.
@@ -103,33 +104,11 @@ export class BraidView extends ItemView {
   }
 
   async onClose(): Promise<void> {
-    this.tipEl?.remove();
-    this.tipEl = null;
+    this.tips.destroy();
   }
 
   private tip(el: Element, text: string): void {
-    el.addEventListener("pointerenter", (evt) => {
-      const t = this.tipEl ?? (this.tipEl = document.body.createDiv({ cls: "contexts-braid-tip" }));
-      t.setText(text);
-      t.style.display = "block";
-      this.moveTip(evt as PointerEvent);
-    });
-    el.addEventListener("pointermove", (evt) => this.moveTip(evt as PointerEvent));
-    el.addEventListener("pointerleave", () => this.hideTip());
-  }
-
-  private hideTip(): void {
-    if (this.tipEl) this.tipEl.style.display = "none";
-  }
-
-  private moveTip(evt: PointerEvent): void {
-    if (!this.tipEl) return;
-    const pad = 12;
-    const w = this.tipEl.offsetWidth;
-    let x = evt.clientX + pad;
-    if (x + w > window.innerWidth - 8) x = evt.clientX - w - pad;
-    this.tipEl.style.left = `${x}px`;
-    this.tipEl.style.top = `${Math.min(evt.clientY + pad, window.innerHeight - this.tipEl.offsetHeight - 8)}px`;
+    this.tips.attach(el, text);
   }
 
   getViewType(): string {
@@ -156,7 +135,7 @@ export class BraidView extends ItemView {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("contexts-braid-view");
-    this.hideTip(); // the elements holding its leave-listener are gone
+    this.tips.hide(); // the elements holding its leave-listener are gone
 
     const header = contentEl.createDiv({ cls: "contexts-braid-header" });
     const seg = header.createDiv({ cls: "contexts-braid-seg" });

@@ -5,6 +5,7 @@ import { DayBlock } from "./dayblock";
 import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import { BRAID_VIEW_TYPE, BraidView } from "./braid";
+import { MAP_VIEW_TYPE, MapView } from "./map";
 import {
   LeaveReason,
   LogEvent,
@@ -108,6 +109,7 @@ export default class ContextsPlugin extends Plugin {
 
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerView(BRAID_VIEW_TYPE, (leaf) => new BraidView(leaf, this));
+    this.registerView(MAP_VIEW_TYPE, (leaf) => new MapView(leaf, this));
     this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
     this.registerMarkdownCodeBlockProcessor("contexts-day", (source, el, ctx) => {
       ctx.addChild(new DayBlock(this, el, source, ctx.sourcePath));
@@ -179,6 +181,11 @@ export default class ContextsPlugin extends Plugin {
       id: "open-braid",
       name: "Open braid",
       callback: () => void this.activateBraid(),
+    });
+    this.addCommand({
+      id: "open-map",
+      name: "Open cognition map",
+      callback: () => void this.activateFullView(MAP_VIEW_TYPE),
     });
 
     this.app.workspace.onLayoutReady(() => {
@@ -658,6 +665,9 @@ export default class ContextsPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(BRAID_VIEW_TYPE)) {
       void (leaf.view as BraidView).render();
     }
+    for (const leaf of this.app.workspace.getLeavesOfType(MAP_VIEW_TYPE)) {
+      void (leaf.view as MapView).render();
+    }
     for (const block of this.dayBlocks) void block.render();
   }
 
@@ -690,12 +700,16 @@ export default class ContextsPlugin extends Plugin {
     await this.app.workspace.revealLeaf(leaf);
   }
 
-  /** The braid is a full view: it opens as a main-area tab, not a sidebar pane. */
-  private async activateBraid(): Promise<void> {
-    const existing = this.app.workspace.getLeavesOfType(BRAID_VIEW_TYPE)[0];
+  /** Braid and map are full views: they open as main-area tabs, not sidebar panes. */
+  private async activateFullView(type: string): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(type)[0];
     const leaf = existing ?? this.app.workspace.getLeaf(true);
-    if (!existing) await leaf.setViewState({ type: BRAID_VIEW_TYPE, active: true });
+    if (!existing) await leaf.setViewState({ type, active: true });
     await this.app.workspace.revealLeaf(leaf);
+  }
+
+  private activateBraid(): Promise<void> {
+    return this.activateFullView(BRAID_VIEW_TYPE);
   }
 
   /**

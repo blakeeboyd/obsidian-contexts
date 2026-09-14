@@ -534,7 +534,7 @@ export class MapView extends ItemView {
           g,
           `${n.path} · ${fmtClock(n.firstAt)} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${
             n.edits ? `${n.edits} edit${n.edits === 1 ? "" : "s"}` : "read only"
-          }${n.created ? " · created here" : ""}${n.ctx ? ` · ${n.ctx}` : ""} — right-click to move`
+          }${n.created ? " · created here" : ""} · ${n.ctx || "no context"} — right-click to move`
         );
         g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
         // The braid's correction menu, from here: move these visits, evict,
@@ -601,10 +601,14 @@ export class MapView extends ItemView {
       this.selected = null;
       void this.render();
     });
-    for (const t of fileContexts(relEvents, path)) {
+    // A file with no memberships still gets a row — "(no context)" is a
+    // state the user may want to correct, not an absence to hide.
+    const threads = fileContexts(relEvents, path);
+    const ctxRows = threads.length ? threads : [{ name: "", dur: 0 }];
+    for (const t of ctxRows) {
       const ctxRow = head.createDiv({ cls: ["contexts-braid-detail-ctx", "contexts-map-ctx-row"] });
       ctxRow.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(t.name);
-      ctxRow.createSpan({ text: `${t.name || "(no context)"} · ${fmtDur(t.dur)}` });
+      ctxRow.createSpan({ text: t.name ? `${t.name} · ${fmtDur(t.dur)}` : "(no context)" });
       this.tips.attach(ctxRow, "Move or correct this file's visits");
       ctxRow.addEventListener("click", (evt) => this.plugin.openSpanMenu(evt, t.name, path, node.firstAt, node.lastAt));
     }

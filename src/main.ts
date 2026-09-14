@@ -457,6 +457,12 @@ export default class ContextsPlugin extends Plugin {
       };
       const menu = new Menu();
       const base = path.split("/").pop()?.replace(/\.md$/, "");
+      // The state line: what these visits belong to right now, especially
+      // "No context" — the mover needs to see what they're moving from.
+      menu.addItem((i) =>
+        i.setTitle(ctx ? `In ${face(ctx)}` : "No context").setIcon(ctx ? "compass" : "circle-off").setDisabled(true)
+      );
+      menu.addSeparator();
       for (const name of names) {
         if (name === ctx) continue;
         menu.addItem((i) =>

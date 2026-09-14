@@ -339,6 +339,20 @@ export class MapView extends ItemView {
     const main = contentEl.createDiv({ cls: "contexts-braid-main" });
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
     this.svgEl = svg;
+    // One arrowhead marker for every edge: fill follows the line's own
+    // stroke (context-stroke), and orient=auto flips it on backward curves.
+    const marker = svg.createSvg("defs").createSvg("marker", {
+      attr: {
+        id: "contexts-map-arrow",
+        viewBox: "0 0 8 8",
+        refX: 7,
+        refY: 4,
+        markerWidth: 5.5,
+        markerHeight: 5.5,
+        orient: "auto-start-reverse",
+      },
+    });
+    marker.createSvg("path", { attr: { d: "M 0 0 L 8 4 L 0 8 z", fill: "context-stroke" } });
     let panned = false;
     svg.addEventListener("click", (evt) => {
       if (evt.target === svg && this.selected && !panned) {

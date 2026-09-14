@@ -679,6 +679,7 @@
   fill: none;
   stroke: var(--background-modifier-border-hover);
   stroke-width: 1.5px;
+  marker-end: url(#contexts-map-arrow);
 }
 
 .contexts-map-edge.is-revisit {

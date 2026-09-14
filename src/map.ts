@@ -20,6 +20,7 @@ import {
   groupSessions,
   healRenames,
   layoutNavTree,
+  pairKey,
 } from "./views";
 
 export const MAP_VIEW_TYPE = "contexts-map";
@@ -430,24 +431,41 @@ export class MapView extends ItemView {
         }
       };
 
+      // One line per pair of files, whatever the ties: the tree edge wins,
+      // upgraded to the "linked" style when a link was also written; among
+      // secondary ties alone, the strongest kind draws. Every tie still
+      // shows in the detail panel — this is drawing economy, not data loss.
+      const RANK = { linked: 3, revisit: 2, peek: 1 } as const;
+      const bestLink = new Map<string, (typeof tree.links)[number]>();
+      for (const link of tree.links) {
+        const key = pairKey(link.from, link.to);
+        const cur = bestLink.get(key);
+        if (!cur || RANK[link.kind] > RANK[cur.kind]) bestLink.set(key, link);
+      }
+      const parentPairs = new Set<string>();
       // Tree edges first (under the nodes), then secondary curves, then nodes.
       const drawEdges = (n: NavNode) => {
         const pp = pos.get(n)!;
         for (const c of n.children) {
           const cp = pos.get(c)!;
+          const key = pairKey(n.path, c.path);
+          parentPairs.add(key);
           const path = svg.createSvg("path", {
             attr: { d: curve(pp.x + pp.w, pp.y, cp.x, cp.y) },
             cls: "contexts-map-edge",
           });
-          // A followed link reads at full strength; mere sequence is fainter.
-          if (c.via === "seq") path.addClass("is-seq");
+          // A followed link reads at full strength; mere sequence is fainter;
+          // a pair that was also LINKED in text carries the strongest style.
+          if (bestLink.get(key)?.kind === "linked") path.addClass("is-linked");
+          else if (c.via === "seq") path.addClass("is-seq");
           if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
           touch(n.path, c.path, path);
           drawEdges(c);
         }
       };
       drawEdges(tree.root);
-      for (const link of tree.links) {
+      for (const link of bestLink.values()) {
+        if (parentPairs.has(pairKey(link.from, link.to))) continue; // the tree edge already carries this pair
         const fp = at.get(link.from);
         const tp = at.get(link.to);
         if (!fp || !tp) continue;

@@ -347,8 +347,11 @@ export class MapView extends ItemView {
         viewBox: "0 0 8 8",
         refX: 7,
         refY: 4,
-        markerWidth: 5.5,
-        markerHeight: 5.5,
+        // Fixed user-space size: markers otherwise scale with stroke width,
+        // so thick (linked, trail) lines grew oversized heads.
+        markerUnits: "userSpaceOnUse",
+        markerWidth: 8,
+        markerHeight: 8,
         orient: "auto-start-reverse",
       },
     });
@@ -457,6 +460,11 @@ export class MapView extends ItemView {
         if (!cur || RANK[link.kind] > RANK[cur.kind]) bestLink.set(key, link);
       }
       const parentPairs = new Set<string>();
+      // A pair tied in both directions gets a head on each end of its one line.
+      const dirs = new Set<string>();
+      for (const [child, parent] of tree.parentOf) if (parent) dirs.add(`${parent} ${child}`);
+      for (const l of tree.links) dirs.add(`${l.from} ${l.to}`);
+      const twoWay = (a: string, b: string) => dirs.has(`${a} ${b}`) && dirs.has(`${b} ${a}`);
       // Tree edges first (under the nodes), then secondary curves, then nodes.
       const drawEdges = (n: NavNode) => {
         const pp = pos.get(n)!;
@@ -472,6 +480,7 @@ export class MapView extends ItemView {
           // a pair that was also LINKED in text carries the strongest style.
           if (bestLink.get(key)?.kind === "linked") path.addClass("is-linked");
           else if (c.via === "seq") path.addClass("is-seq");
+          if (twoWay(n.path, c.path)) path.addClass("is-two-way");
           if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
           touch(n.path, c.path, path);
           drawEdges(c);
@@ -487,6 +496,7 @@ export class MapView extends ItemView {
           attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
           cls: ["contexts-map-edge", `is-${link.kind}`],
         });
+        if (twoWay(link.from, link.to)) el.addClass("is-two-way");
         touch(link.from, link.to, el);
       }
       for (const [n, p] of pos) {

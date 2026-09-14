@@ -857,3 +857,7 @@
 .contexts-map-ctx-row:hover {
   background: var(--background-secondary);
 }
+
+.contexts-map-edge.is-two-way {
+  marker-start: url(#contexts-map-arrow);
+}

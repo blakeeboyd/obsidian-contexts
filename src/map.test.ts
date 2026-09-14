@@ -65,19 +65,55 @@ describe("buildNavForest", () => {
     expect(trees[0].links).toEqual([{ from: "A.md", to: "Daily.md", kind: "peek" }]);
   });
 
-  it("scopes by context, chaining movement through member files only", () => {
+  it("scopes by context per SPAN, skipping excursions and badging the return", () => {
     const events: LogEvent[] = [
       { t: 0, type: "context", name: "ctx1" },
       span("A.md", 1 * MIN),
       span("Other.md", 6 * MIN),
-      span("B.md", 11 * MIN),
-      { t: 20 * MIN, type: "reassign", path: "Other.md", name: "", from: 0, to: 20 * MIN },
+      span("Stray.md", 11 * MIN),
+      span("B.md", 16 * MIN),
+      { t: 30 * MIN, type: "reassign", path: "Other.md", name: "", from: 0, to: 30 * MIN },
+      { t: 31 * MIN, type: "reassign", path: "Stray.md", name: "", from: 0, to: 30 * MIN },
     ];
     const trees = buildNavForest(events, { ctx: "ctx1" });
     expect(trees[0].root.path).toBe("A.md");
-    // Other.md is out of the context, so B's parent is the previous member: A.
+    // The moved-out visits vanish; B chains to the previous in-context file.
     expect(trees[0].parentOf.get("B.md")).toBe("A.md");
-    expect([...trees[0].parentOf.keys()]).not.toContain("Other.md");
+    expect([...trees[0].parentOf.keys()]).toEqual(["A.md", "B.md"]);
+    // The return carries the excursion's shape, not its files.
+    const b = trees[0].root.children[0];
+    expect(b.away).toEqual({ times: 1, dur: 10 * MIN, files: 2 });
+    expect(trees[0].root.away).toBeUndefined();
+  });
+
+  it("removes a file entirely once every span is moved out of the context", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "ctx1" },
+      span("A.md", 1 * MIN),
+      span("Subwoofer.md", 6 * MIN),
+      { t: 29 * MIN, type: "context", name: "ctx2" }, // reassign targets must already exist
+      { t: 30 * MIN, type: "reassign", path: "Subwoofer.md", name: "ctx2", from: 0, to: 20 * MIN },
+    ];
+    const trees = buildNavForest(events, { ctx: "ctx1" });
+    expect([...trees[0].parentOf.keys()]).toEqual(["A.md"]);
+  });
+
+  it("groups trees by day or by Monday-start week", () => {
+    const mon = new Date(2026, 0, 5, 9).getTime(); // Mon Jan 5 2026
+    const tue = new Date(2026, 0, 6, 9).getTime();
+    const nextMon = new Date(2026, 0, 12, 9).getTime();
+    const events: LogEvent[] = [
+      span("MonA.md", mon),
+      span("MonB.md", mon + 300 * MIN), // same day, separate inferred session
+      span("Tue.md", tue),
+      span("Next.md", nextMon),
+    ];
+    expect(buildNavForest(events, {}).length).toBe(4);
+    const byDay = buildNavForest(events, {}, undefined, "day");
+    expect(byDay.map((t) => t.root.path)).toEqual(["MonA.md", "Tue.md", "Next.md"]);
+    expect(byDay[0].parentOf.get("MonB.md")).toBe("MonA.md"); // the day's movement is one tree
+    const byWeek = buildNavForest(events, {}, undefined, "week");
+    expect(byWeek.map((t) => t.root.path)).toEqual(["MonA.md", "Next.md"]);
   });
 });
 

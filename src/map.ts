@@ -6,6 +6,7 @@ import { HoverTip } from "./tip";
 import {
   NAV_H_GAP,
   NAV_ROW_H,
+  NavGroup,
   NavNode,
   NavTree,
   applyErasures,
@@ -49,6 +50,8 @@ export class MapView extends ItemView {
   private ctxChoice: string | null = null;
   // The most recent session reads first: today's map starts with now.
   private newestFirst = true;
+  // Tree granularity: a tree per inferred session, per day, or per week.
+  private groupBy: NavGroup = "session";
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -170,9 +173,25 @@ export class MapView extends ItemView {
     });
     const orderBtn = header.createEl("button", { cls: "contexts-braid-seg-btn contexts-map-order" });
     setIcon(orderBtn, this.newestFirst ? "arrow-down-wide-narrow" : "arrow-up-narrow-wide");
-    orderBtn.setAttribute("aria-label", "Session order");
+    orderBtn.setAttribute("aria-label", "Grouping and order");
     orderBtn.addEventListener("click", (evt) => {
       const menu = new Menu();
+      const group = (label: string, g: NavGroup) =>
+        menu.addItem((i) =>
+          i
+            .setTitle(label)
+            .setChecked(this.groupBy === g)
+            .onClick(() => {
+              if (this.groupBy === g) return;
+              this.groupBy = g;
+              this.manualVB = null; // a new grain is a new picture; refit
+              void this.render();
+            })
+        );
+      group("A tree per session", "session");
+      group("A tree per day", "day");
+      group("A tree per week", "week");
+      menu.addSeparator();
       const pick = (label: string, newest: boolean) =>
         menu.addItem((i) =>
           i
@@ -185,8 +204,8 @@ export class MapView extends ItemView {
               void this.render();
             })
         );
-      pick("Newest session first", true);
-      pick("Oldest session first", false);
+      pick("Newest first", true);
+      pick("Oldest first", false);
       menu.showAtMouseEvent(evt);
     });
     header.createSpan({
@@ -200,7 +219,7 @@ export class MapView extends ItemView {
       if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
-    const trees = buildNavForest(relEvents, scopeArg, gapMs);
+    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy);
     if (this.newestFirst) trees.reverse();
     if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
@@ -350,15 +369,20 @@ export class MapView extends ItemView {
       for (const [n, p] of pos) at.set(n.path, p);
       const onTrail = (path: string) => tree === trailTree && trail.has(path);
 
-      // Session label, left of the root: the day, then the clock.
+      // Tree label, left of the root: when this run of work began.
       const rootPos = pos.get(tree.root)!;
       const label = svg.createSvg("text", {
         attr: { x: LEFT_X - 14, y: rootPos.y - 2, "text-anchor": "end" },
         cls: "contexts-map-session",
       });
-      label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = relDay(tree.start);
-      label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent =
-        fmtClock(tree.start);
+      const d = new Date(tree.start);
+      const line1 =
+        this.groupBy === "week"
+          ? `Week of ${new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}`
+          : relDay(tree.start);
+      label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = line1;
+      const line2 = this.groupBy === "week" ? relDay(tree.start) : fmtClock(tree.start);
+      label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
 
       // Tree edges first (under the nodes), then secondary curves, then nodes.
       const drawEdges = (n: NavNode) => {
@@ -408,6 +432,19 @@ export class MapView extends ItemView {
           }${n.ctx ? ` · ${n.ctx}` : ""}`
         );
         g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
+        // The excursion badge: the user left the context and came back here.
+        // The elision is the point — the foreign files stay off the map.
+        if (n.away) {
+          const badge = svg.createSvg("g", { cls: "contexts-map-away" });
+          badge.createSvg("circle", { attr: { cx: p.x - 12, cy: p.y, r: 6 } });
+          badge.createSvg("text", { attr: { x: p.x - 12, y: p.y + 3, "text-anchor": "middle" } }).textContent = "⋯";
+          this.tips.attach(
+            badge,
+            `left the context ${n.away.times === 1 ? "once" : `${n.away.times}×`} before returning here · ${fmtDur(
+              n.away.dur
+            )} away · ${n.away.files} file${n.away.files === 1 ? "" : "s"} elsewhere`
+          );
+        }
       }
     }
 

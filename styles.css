@@ -778,3 +778,14 @@
   border-radius: 8px;
   padding: 5px 10px;
 }
+
+.contexts-map-away circle {
+  fill: var(--background-primary);
+  stroke: var(--background-modifier-border-hover);
+  stroke-dasharray: 2 2;
+}
+
+.contexts-map-away text {
+  font-size: 9px;
+  fill: var(--text-faint);
+}

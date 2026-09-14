@@ -52,7 +52,8 @@ export class MapView extends ItemView {
   // The most recent session reads first: today's map starts with now.
   private newestFirst = true;
   // Tree granularity: a tree per inferred session, per day, or per week.
-  private groupBy: NavGroup = "session";
+  // Day is the default: the map's founding image is the day's movement.
+  private groupBy: NavGroup = "day";
   // Declutter: read-only LEAVES shrink to unlabeled dots. Hiding them would
   // lie about the path (children would hang from a step never taken), and a
   // read-only file that led somewhere is a waypoint that keeps its label —

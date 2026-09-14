@@ -6,10 +6,12 @@
 export class HoverTip {
   private el: HTMLElement | null = null;
 
-  attach(target: Element, text: string): void {
+  attach(target: Element, content: string | ((el: HTMLElement) => void)): void {
     target.addEventListener("pointerenter", (evt) => {
       const t = this.el ?? (this.el = document.body.createDiv({ cls: "contexts-braid-tip" }));
-      t.setText(text);
+      t.empty();
+      if (typeof content === "string") t.setText(content);
+      else content(t);
       t.style.display = "block";
       this.move(evt as PointerEvent);
     });

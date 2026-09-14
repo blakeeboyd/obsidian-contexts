@@ -59,6 +59,10 @@ export interface ContextsSettings {
   trailDetailNewestFirst: boolean;
   paused: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
+  // Bridge files (daily notes, inboxes): they inherit every context they're
+  // visited under, but opening one never pulls the declaration — they
+  // bridge contexts instead of belonging to one.
+  bridgeFolders: string[];
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -92,6 +96,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   trailDetailNewestFirst: true,
   paused: false,
   excludedFolders: [],
+  bridgeFolders: [],
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -124,6 +129,28 @@ export class ContextsSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
+  /** An editable folder list (search input with suggestions + remove button per row), mutating `folders` in place. */
+  private folderList(containerEl: HTMLElement, folders: string[]): void {
+    folders.forEach((folder, i) => {
+      const save = async (v: string) => {
+        folders[i] = v.trim().replace(/\/+$/, "");
+        await this.plugin.saveSettings();
+      };
+      new Setting(containerEl)
+        .addSearch((search) => {
+          search.setPlaceholder("Folder path").setValue(folder).onChange(save);
+          new FolderSuggest(this.app, search.inputEl, (path) => void save(path));
+        })
+        .addExtraButton((b) =>
+          b.setIcon("trash").setTooltip("Remove").onClick(async () => {
+            folders.splice(i, 1);
+            await this.plugin.saveSettings();
+            this.display();
+          })
+        );
+    });
+  }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -146,24 +173,22 @@ export class ContextsSettingTab extends PluginSettingTab {
         })
       );
 
-    this.plugin.settings.excludedFolders.forEach((folder, i) => {
-      const save = async (v: string) => {
-        this.plugin.settings.excludedFolders[i] = v.trim().replace(/\/+$/, "");
-        await this.plugin.saveSettings();
-      };
-      new Setting(containerEl)
-        .addSearch((search) => {
-          search.setPlaceholder("Folder path").setValue(folder).onChange(save);
-          new FolderSuggest(this.app, search.inputEl, (path) => void save(path));
+    this.folderList(containerEl, this.plugin.settings.excludedFolders);
+
+    new Setting(containerEl)
+      .setName("Bridge folders")
+      .setDesc(
+        "Files here (daily notes, inboxes) inherit every context they're visited under, but opening one never switches your context — they bridge contexts instead of belonging to one. Frontmatter `context-role: bridge` marks a single file the same way."
+      )
+      .addButton((b) =>
+        b.setButtonText("Add folder").onClick(async () => {
+          this.plugin.settings.bridgeFolders.push("");
+          await this.plugin.saveSettings();
+          this.display();
         })
-        .addExtraButton((b) =>
-          b.setIcon("trash").setTooltip("Remove").onClick(async () => {
-            this.plugin.settings.excludedFolders.splice(i, 1);
-            await this.plugin.saveSettings();
-            this.display();
-          })
-        );
-    });
+      );
+
+    this.folderList(containerEl, this.plugin.settings.bridgeFolders);
 
     new Setting(containerEl).setName("Capture").setHeading()
       .setDesc("Everything is on by default. Turning a signal off skips its work entirely; it stops being recorded from that moment on.");

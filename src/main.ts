@@ -385,6 +385,9 @@ export default class ContextsPlugin extends Plugin {
    * span joins the home context; via:"auto" marks it for calibration.
    */
   private maybeOfferHomeContext(path: string, activatedAt: number): void {
+    // A bridge never pulls, in or out: opening the daily note mid-context
+    // must not yank you to wherever the note spent the most time.
+    if (this.isBridge(path)) return;
     void (async () => {
       const events = await this.getEvents();
       // A manual declaration is FRESH until the user has worked in a
@@ -668,6 +671,19 @@ export default class ContextsPlugin extends Plugin {
   /** The plugin's own views announce the opens they cause, so the record knows the arrival surface. */
   noteUiOpen(via: OpenMethod): void {
     this.lastUiOpen = { via, t: Date.now() };
+  }
+
+  /**
+   * A bridge file (daily note, inbox) inherits every context it's visited
+   * under but never pulls the declaration when opened — it bridges contexts
+   * instead of belonging to one. Marked by folder (settings) or frontmatter
+   * `context-role: bridge`.
+   */
+  isBridge(path: string): boolean {
+    if (this.settings.bridgeFolders.some((f) => f && (path === f || path.startsWith(f + "/")))) return true;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return false;
+    return this.app.metadataCache.getFileCache(file)?.frontmatter?.["context-role"] === "bridge";
   }
 
   registerDayBlock(block: DayBlock): void {

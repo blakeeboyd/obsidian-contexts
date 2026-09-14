@@ -383,10 +383,14 @@ export class MapView extends ItemView {
     // visible while dropping the label. ponytail: fixed threshold; a
     // settings knob if 30s turns out to be the wrong line.
     const BRIEF_MS = 30_000;
-    const isCompact = (n: NavNode) =>
+    // Never compacted: a tree's root and its chronologically last file —
+    // where the sitting began and where it ended anchor the reading.
+    const anchors = new Map<NavTree, Set<string>>();
+    const isCompact = (n: NavNode, tree: NavTree) =>
       this.compactReads &&
       !n.edits &&
       !n.created &&
+      !anchors.get(tree)?.has(n.path) &&
       n.path !== this.selected &&
       n.path !== this.plugin.lastActiveMdPath &&
       (n.children.length === 0 || n.dur < BRIEF_MS);
@@ -395,14 +399,17 @@ export class MapView extends ItemView {
     let yCursor = 0;
     for (const tree of trees) {
       const nodeOf = new Map<string, NavNode>();
+      let last: NavNode = tree.root;
       const walk = (n: NavNode): void => {
         nodeOf.set(n.path, n);
+        if (n.lastAt > last.lastAt) last = n;
         n.children.forEach(walk);
       };
       walk(tree.root);
+      anchors.set(tree, new Set([tree.root.path, last.path]));
       const w = (path: string) => {
         const n = nodeOf.get(path);
-        return n && isCompact(n) ? COMPACT_W : widthOf(path);
+        return n && isCompact(n, tree) ? COMPACT_W : widthOf(path);
       };
       const { pos, height } = layoutNavTree(tree.root, w, LEFT_X, yCursor);
       placements.push({ tree, pos });
@@ -600,7 +607,7 @@ export class MapView extends ItemView {
         if (n.path === current && tree === trailTree) g.addClass("is-current");
         if (n.path === this.selected) g.addClass("is-selected");
         const heat = Math.sqrt(n.dur / maxDur);
-        if (isCompact(n)) {
+        if (isCompact(n, tree)) {
           // A drive-by read: structure without a label. Hover says the rest.
           g.addClass("is-mini");
           const r = this.showEngagement ? 4 + 3 * heat : 5;
@@ -633,12 +640,19 @@ export class MapView extends ItemView {
             badge.createSvg("text", { attr: { x: p.x + 2, y: p.y - h / 2 + 4, "text-anchor": "middle" } }).textContent = "+";
           }
         }
-        this.tips.attach(
-          g,
-          `${n.path} · ${fmtClock(n.firstAt)} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${
-            n.edits ? `${n.edits} edit${n.edits === 1 ? "" : "s"}` : "read only"
-          }${n.created ? " · created here" : ""} · ${n.ctx || "no context"} — right-click to move`
-        );
+        // Hover card: the name with the sidebar trail's icon vocabulary
+        // (pencil = edited, book = read), then one quiet meta line. No path;
+        // the detail panel carries it.
+        this.tips.attach(g, (el) => {
+          const name = el.createDiv({ cls: "contexts-tip-name" });
+          setIcon(name.createSpan({ cls: "contexts-chip-icon" }), n.edits ? "pencil" : "book-open");
+          name.createSpan({ text: baseOf(n.path) });
+          const meta: string[] = [fmtClock(n.firstAt), `${fmtDur(n.dur)} engaged`, `${n.visits} visit${n.visits === 1 ? "" : "s"}`];
+          if (n.edits) meta.push(`${n.edits} edit${n.edits === 1 ? "" : "s"}`);
+          if (n.created) meta.push("created here");
+          meta.push(n.ctx || "no context");
+          el.createDiv({ text: meta.join(" · "), cls: "contexts-tip-meta" });
+        });
         g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
         // The braid's correction menu, from here: move these visits, evict,
         // unassign, or delete — covering this node's whole stretch.

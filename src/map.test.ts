@@ -23,6 +23,27 @@ describe("buildNavForest", () => {
     expect(root.children.map((n) => n.path)).toEqual(["A.md"]);
     expect(root.children[0].children.map((n) => n.path)).toEqual(["B.md"]);
     expect(trees[0].parentOf.get("C.md")).toBe("B.md");
+    // Arrival kind survives onto the node: followed link vs mere sequence.
+    expect(root.via).toBeUndefined();
+    expect(root.children[0].via).toBe("link");
+    const c = root.children[0].children[0].children[0];
+    expect(c.via).toBe("seq");
+  });
+
+  it("marks files created in the sitting and resolves written links to placed nodes", () => {
+    const events: LogEvent[] = [
+      span("Daily.md", 0, 5 * MIN, { edit: { linksAdded: ["Projects/New Note", "Nowhere"] } }),
+      { t: 5 * MIN + 10_000, type: "create", path: "New Note.md" },
+      span("New Note.md", 5 * MIN + 11_000),
+    ];
+    const trees = buildNavForest(events, {});
+    const born = trees[0].root.children[0];
+    expect(born.path).toBe("New Note.md");
+    expect(born.created).toBe(true);
+    expect(trees[0].root.created).toBeUndefined();
+    // "Projects/New Note" resolves by basename; "Nowhere" points at no node.
+    expect(trees[0].links).toEqual([{ from: "Daily.md", to: "New Note.md", kind: "linked" }]);
+    expect(born.lastAt).toBe(born.firstAt + 5 * MIN);
   });
 
   it("keeps first placement on revisits and records later arrivals as secondary links", () => {
@@ -121,6 +142,7 @@ describe("layoutNavTree", () => {
   const node = (path: string, children: NavNode[] = []): NavNode => ({
     path,
     firstAt: 0,
+    lastAt: 0,
     ctx: "",
     dur: 0,
     visits: 1,

@@ -52,6 +52,11 @@ export class MapView extends ItemView {
   private newestFirst = true;
   // Tree granularity: a tree per inferred session, per day, or per week.
   private groupBy: NavGroup = "session";
+  // Declutter: read-only LEAVES shrink to unlabeled dots. Hiding them would
+  // lie about the path (children would hang from a step never taken), and a
+  // read-only file that led somewhere is a waypoint that keeps its label —
+  // the clutter is labels on drive-by leaves, not reading itself.
+  private compactReads = false;
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -192,6 +197,17 @@ export class MapView extends ItemView {
       group("A tree per day", "day");
       group("A tree per week", "week");
       menu.addSeparator();
+      menu.addItem((i) =>
+        i
+          .setTitle("Compact read-only leaves")
+          .setChecked(this.compactReads)
+          .onClick(() => {
+            this.compactReads = !this.compactReads;
+            this.manualVB = null;
+            void this.render();
+          })
+      );
+      menu.addSeparator();
       const pick = (label: string, newest: boolean) =>
         menu.addItem((i) =>
           i
@@ -278,11 +294,29 @@ export class MapView extends ItemView {
 
     // Stack the session trees; remember where every path last appeared for
     // trails and the detail panel (the latest session is the one that counts).
+    const COMPACT_W = 16;
+    const isCompact = (n: NavNode) =>
+      this.compactReads &&
+      !n.edits &&
+      !n.created &&
+      n.children.length === 0 &&
+      n.path !== this.selected &&
+      n.path !== this.plugin.lastActiveMdPath;
     const placements: { tree: NavTree; pos: Map<NavNode, { x: number; y: number; w: number }> }[] = [];
     const latestNode = new Map<string, { tree: NavTree; node: NavNode }>();
     let yCursor = 0;
     for (const tree of trees) {
-      const { pos, height } = layoutNavTree(tree.root, widthOf, LEFT_X, yCursor);
+      const nodeOf = new Map<string, NavNode>();
+      const walk = (n: NavNode): void => {
+        nodeOf.set(n.path, n);
+        n.children.forEach(walk);
+      };
+      walk(tree.root);
+      const w = (path: string) => {
+        const n = nodeOf.get(path);
+        return n && isCompact(n) ? COMPACT_W : widthOf(path);
+      };
+      const { pos, height } = layoutNavTree(tree.root, w, LEFT_X, yCursor);
       placements.push({ tree, pos });
       for (const n of pos.keys()) latestNode.set(n.path, { tree, node: n });
       yCursor += height + TREE_GAP;
@@ -384,6 +418,18 @@ export class MapView extends ItemView {
       const line2 = this.groupBy === "week" ? relDay(tree.start) : fmtClock(tree.start);
       label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
 
+      // Hover wiring: every edge registers with both endpoints, so mousing
+      // over a node can light its lines and, slightly, its neighbors.
+      const groupOf = new Map<string, SVGGElement>();
+      const touching = new Map<string, { el: SVGElement; other: string }[]>();
+      const touch = (a: string, b: string, el: SVGElement) => {
+        for (const [me, other] of [[a, b], [b, a]] as const) {
+          let list = touching.get(me);
+          if (!list) touching.set(me, (list = []));
+          list.push({ el, other });
+        }
+      };
+
       // Tree edges first (under the nodes), then secondary curves, then nodes.
       const drawEdges = (n: NavNode) => {
         const pp = pos.get(n)!;
@@ -393,7 +439,10 @@ export class MapView extends ItemView {
             attr: { d: curve(pp.x + pp.w, pp.y, cp.x, cp.y) },
             cls: "contexts-map-edge",
           });
+          // A followed link reads at full strength; mere sequence is fainter.
+          if (c.via === "seq") path.addClass("is-seq");
           if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
+          touch(n.path, c.path, path);
           drawEdges(c);
         }
       };
@@ -402,10 +451,11 @@ export class MapView extends ItemView {
         const fp = at.get(link.from);
         const tp = at.get(link.to);
         if (!fp || !tp) continue;
-        svg.createSvg("path", {
+        const el = svg.createSvg("path", {
           attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
           cls: ["contexts-map-edge", `is-${link.kind}`],
         });
+        touch(link.from, link.to, el);
       }
       for (const [n, p] of pos) {
         const g = svg.createSvg("g", { cls: "contexts-map-nav" });
@@ -413,25 +463,41 @@ export class MapView extends ItemView {
         if (onTrail(n.path)) g.addClass("is-trail");
         if (n.path === current && tree === trailTree) g.addClass("is-current");
         if (n.path === this.selected) g.addClass("is-selected");
-        const h = heightOf(n.path);
-        g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
-        g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
-          colorOf(n.ctx);
-        const lines = linesOf(n.path);
-        const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
-        if (lines.length === 1) {
-          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 4 } }).textContent = lines[0];
+        if (isCompact(n)) {
+          // A drive-by read: structure without a label. Hover says the rest.
+          g.addClass("is-mini");
+          g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r: 5 }, cls: "contexts-map-mini" }).style.fill =
+            colorOf(n.ctx);
         } else {
-          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y - 3 } }).textContent = lines[0];
-          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 10 } }).textContent = lines[1];
+          const h = heightOf(n.path);
+          g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
+          g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
+            colorOf(n.ctx);
+          const lines = linesOf(n.path);
+          const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
+          if (lines.length === 1) {
+            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 4 } }).textContent = lines[0];
+          } else {
+            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y - 3 } }).textContent = lines[0];
+            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 10 } }).textContent = lines[1];
+          }
+          if (n.created) {
+            const badge = g.createSvg("g", { cls: "contexts-map-created" });
+            badge.createSvg("circle", { attr: { cx: p.x + 2, cy: p.y - h / 2 + 1, r: 5 } });
+            badge.createSvg("text", { attr: { x: p.x + 2, y: p.y - h / 2 + 4, "text-anchor": "middle" } }).textContent = "+";
+          }
         }
         this.tips.attach(
           g,
           `${n.path} · ${fmtClock(n.firstAt)} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${
             n.edits ? `${n.edits} edit${n.edits === 1 ? "" : "s"}` : "read only"
-          }${n.ctx ? ` · ${n.ctx}` : ""}`
+          }${n.created ? " · created here" : ""}${n.ctx ? ` · ${n.ctx}` : ""} — right-click to move`
         );
         g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
+        // The braid's correction menu, from here: move these visits, evict,
+        // unassign, or delete — covering this node's whole stretch.
+        g.addEventListener("contextmenu", (evt) => this.plugin.openSpanMenu(evt, n.ctx, n.path, n.firstAt, n.lastAt));
+        groupOf.set(n.path, g);
         // The excursion badge: the user left the context and came back here.
         // The elision is the point — the foreign files stay off the map.
         if (n.away) {
@@ -445,6 +511,17 @@ export class MapView extends ItemView {
             )} away · ${n.away.files} file${n.away.files === 1 ? "" : "s"} elsewhere`
           );
         }
+      }
+      for (const [path, g] of groupOf) {
+        const set = (on: boolean) => {
+          g.toggleClass("is-hover", on);
+          for (const t of touching.get(path) ?? []) {
+            t.el.toggleClass("is-hl", on);
+            groupOf.get(t.other)?.toggleClass("is-hl", on);
+          }
+        };
+        g.addEventListener("pointerenter", () => set(true));
+        g.addEventListener("pointerleave", () => set(false));
       }
     }
 
@@ -482,9 +559,11 @@ export class MapView extends ItemView {
       void this.render();
     });
     for (const t of fileContexts(relEvents, path)) {
-      const ctxRow = head.createDiv({ cls: "contexts-braid-detail-ctx" });
+      const ctxRow = head.createDiv({ cls: ["contexts-braid-detail-ctx", "contexts-map-ctx-row"] });
       ctxRow.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(t.name);
       ctxRow.createSpan({ text: `${t.name || "(no context)"} · ${fmtDur(t.dur)}` });
+      this.tips.attach(ctxRow, "Move or correct this file's visits");
+      ctxRow.addEventListener("click", (evt) => this.plugin.openSpanMenu(evt, t.name, path, node.firstAt, node.lastAt));
     }
     head.createDiv({ text: path, cls: "contexts-braid-detail-path" });
     head.createDiv({
@@ -521,7 +600,17 @@ export class MapView extends ItemView {
       list.createDiv({ cls: "contexts-braid-detail-day" }).createSpan({ text: "Also crossed" });
       for (const l of also) {
         const other = l.to === path ? l.from : l.to;
-        row(l.kind, other, l.kind === "peek" ? "peeked" : l.to === path ? "returned from" : "returned to");
+        const meta =
+          l.kind === "peek"
+            ? "peeked"
+            : l.kind === "linked"
+            ? l.from === path
+              ? "link written to"
+              : "link written from"
+            : l.to === path
+            ? "returned from"
+            : "returned to";
+        row(l.kind, other, meta);
       }
     }
     if (!parent && !node.children.length && !also.length) {

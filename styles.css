@@ -789,3 +789,70 @@
   font-size: 9px;
   fill: var(--text-faint);
 }
+
+/* Connection grammar: followed links full strength, sequence fainter,
+   written links strongest. */
+.contexts-map-edge.is-seq {
+  opacity: 0.5;
+}
+
+.contexts-map-edge.is-linked {
+  stroke: var(--text-muted);
+  stroke-width: 2px;
+}
+
+.contexts-map-edge.is-hl {
+  stroke: var(--text-muted);
+  stroke-width: 2px;
+  opacity: 1;
+}
+
+.contexts-map-edge.is-trail.is-hl {
+  stroke: var(--interactive-accent);
+}
+
+/* Hover: the moused-over node strongly, its neighbors slightly. */
+.contexts-map-nav.is-hover rect {
+  stroke: var(--text-normal);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-nav.is-hover .contexts-map-nav-label,
+.contexts-map-nav.is-hl .contexts-map-nav-label {
+  fill: var(--text-normal);
+}
+
+.contexts-map-nav.is-hl rect {
+  stroke: var(--background-modifier-border-focus);
+}
+
+.contexts-map-nav.is-hover .contexts-map-mini,
+.contexts-map-nav.is-hl .contexts-map-mini {
+  stroke: var(--text-normal);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-nav.is-trail .contexts-map-mini {
+  stroke: var(--interactive-accent);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-created circle {
+  fill: var(--background-secondary);
+  stroke: var(--background-modifier-border-hover);
+}
+
+.contexts-map-created text {
+  font-size: 9px;
+  font-weight: 600;
+  fill: var(--text-muted);
+}
+
+.contexts-map-ctx-row {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.contexts-map-ctx-row:hover {
+  background: var(--background-secondary);
+}

@@ -195,17 +195,43 @@ export class MapView extends ItemView {
       return PALETTE[(i === -1 ? colored.length : i) % PALETTE.length];
     };
 
-    // Label widths from real text metrics, so columns stagger like Tangent's.
+    // Label metrics from real text measurement, so columns stagger like
+    // Tangent's. Long names wrap to two lines; anything longer ellipsizes
+    // (the hover card always carries the full path).
     const canvas = document.createElement("canvas");
     const mctx = canvas.getContext("2d")!;
     mctx.font = `500 12px ${getComputedStyle(document.body).fontFamily}`;
-    const widths = new Map<string, number>();
     const baseOf = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
-    const widthOf = (path: string) => {
-      let w = widths.get(path);
-      if (w === undefined) widths.set(path, (w = Math.min(mctx.measureText(baseOf(path)).width, MAX_LABEL_W) + 32));
-      return w;
+    const fit = (str: string): string => {
+      if (mctx.measureText(str).width <= MAX_LABEL_W) return str;
+      while (str && mctx.measureText(str + "…").width > MAX_LABEL_W) str = str.slice(0, -1);
+      return str + "…";
     };
+    const lineCache = new Map<string, string[]>();
+    const linesOf = (path: string): string[] => {
+      let lines = lineCache.get(path);
+      if (lines) return lines;
+      const base = baseOf(path);
+      if (mctx.measureText(base).width <= MAX_LABEL_W) lines = [base];
+      else {
+        const words = base.split(" ");
+        let l1 = "";
+        let i = 0;
+        while (i < words.length) {
+          const next = l1 ? `${l1} ${words[i]}` : words[i];
+          if (l1 && mctx.measureText(next).width > MAX_LABEL_W) break;
+          l1 = next;
+          i++;
+        }
+        const l2 = words.slice(i).join(" ");
+        lines = l2 ? [fit(l1), fit(l2)] : [fit(l1)];
+      }
+      lineCache.set(path, lines);
+      return lines;
+    };
+    const widthOf = (path: string) =>
+      Math.max(...linesOf(path).map((l) => mctx.measureText(l).width)) + 32;
+    const heightOf = (path: string) => (linesOf(path).length > 1 ? 36 : NODE_H);
 
     // Stack the session trees; remember where every path last appeared for
     // trails and the detail panel (the latest session is the one that counts).
@@ -245,10 +271,20 @@ export class MapView extends ItemView {
     svg.addEventListener(
       "wheel",
       (evt: WheelEvent) => {
-        // Pinch arrives as ctrl+wheel; ⌘-wheel is the pointer-mouse spelling.
-        if (!evt.ctrlKey && !evt.metaKey) return;
         evt.preventDefault();
-        this.zoomBy(evt.deltaY < 0 ? 1.25 : 0.8, evt.clientX, evt.clientY);
+        if (evt.ctrlKey || evt.metaKey) {
+          // Pinch arrives as ctrl+wheel; ⌘-wheel is the pointer-mouse
+          // spelling. Continuous: the factor follows the actual delta, so a
+          // gentle pinch zooms gently and a wheel notch stays moderate.
+          this.zoomBy(Math.exp(-evt.deltaY * 0.004), evt.clientX, evt.clientY);
+          return;
+        }
+        // Plain two-finger scroll pans the canvas, in viewBox units.
+        const cur = this.manualVB ?? (this.manualVB = { ...this.fitVB });
+        const scale = cur.w / svg.clientWidth;
+        cur.x += evt.deltaX * scale;
+        cur.y += evt.deltaY * scale;
+        this.applyVB();
       },
       { passive: false }
     );
@@ -329,12 +365,18 @@ export class MapView extends ItemView {
         if (onTrail(n.path)) g.addClass("is-trail");
         if (n.path === current && tree === trailTree) g.addClass("is-current");
         if (n.path === this.selected) g.addClass("is-selected");
-        g.createSvg("rect", { attr: { x: p.x, y: p.y - NODE_H / 2, width: p.w, height: NODE_H, rx: 6 } });
+        const h = heightOf(n.path);
+        g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
         g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
           colorOf(n.ctx);
-        g.createSvg("text", { attr: { x: p.x + 21, y: p.y + 4 }, cls: "contexts-map-nav-label" }).textContent = baseOf(
-          n.path
-        );
+        const lines = linesOf(n.path);
+        const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
+        if (lines.length === 1) {
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 4 } }).textContent = lines[0];
+        } else {
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y - 3 } }).textContent = lines[0];
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 10 } }).textContent = lines[1];
+        }
         this.tips.attach(
           g,
           `${n.path} · ${fmtClock(n.firstAt)} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${

@@ -1,4 +1,4 @@
-import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type ContextsPlugin from "./main";
 import { PALETTE, UNASSIGNED_COLOR } from "./braid";
 import { fmtClock, fmtDur, relDay } from "./format";
@@ -47,6 +47,8 @@ const MAX_LABEL_W = 180;
 export class MapView extends ItemView {
   private mapScope: MapScope = "day";
   private ctxChoice: string | null = null;
+  // The most recent session reads first: today's map starts with now.
+  private newestFirst = true;
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -166,6 +168,27 @@ export class MapView extends ItemView {
       this.manualVB = null;
       this.applyVB();
     });
+    const orderBtn = header.createEl("button", { cls: "contexts-braid-seg-btn contexts-map-order" });
+    setIcon(orderBtn, this.newestFirst ? "arrow-down-wide-narrow" : "arrow-up-narrow-wide");
+    orderBtn.setAttribute("aria-label", "Session order");
+    orderBtn.addEventListener("click", (evt) => {
+      const menu = new Menu();
+      const pick = (label: string, newest: boolean) =>
+        menu.addItem((i) =>
+          i
+            .setTitle(label)
+            .setChecked(this.newestFirst === newest)
+            .onClick(() => {
+              if (this.newestFirst === newest) return;
+              this.newestFirst = newest;
+              this.manualVB = null; // the stack reordered; refit
+              void this.render();
+            })
+        );
+      pick("Newest session first", true);
+      pick("Oldest session first", false);
+      menu.showAtMouseEvent(evt);
+    });
     header.createSpan({
       text: "click a note for its detail · ⌘-click opens it · ⌘-scroll zooms · drag pans",
       cls: "contexts-braid-hint",
@@ -178,6 +201,7 @@ export class MapView extends ItemView {
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
     const trees = buildNavForest(relEvents, scopeArg, gapMs);
+    if (this.newestFirst) trees.reverse();
     if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
       return;

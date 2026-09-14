@@ -772,3 +772,9 @@
   background: var(--background-secondary);
   border-radius: 4px;
 }
+
+.contexts-map-order {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 5px 10px;
+}

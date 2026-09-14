@@ -320,7 +320,7 @@ export class MapView extends ItemView {
         if (!fp || !tp) continue;
         svg.createSvg("path", {
           attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
-          cls: `contexts-map-edge is-${link.kind}`,
+          cls: ["contexts-map-edge", `is-${link.kind}`],
         });
       }
       for (const [n, p] of pos) {
@@ -398,7 +398,7 @@ export class MapView extends ItemView {
 
     const list = panel.createDiv({ cls: "contexts-braid-detail-list" });
     const row = (label: string, target: string, meta?: string) => {
-      const r = list.createDiv({ cls: "contexts-braid-detail-row contexts-map-related" });
+      const r = list.createDiv({ cls: ["contexts-braid-detail-row", "contexts-map-related"] });
       r.createSpan({ text: target.split("/").pop()?.replace(/\.md$/, "") ?? target });
       r.createSpan({ text: meta ?? label, cls: "contexts-braid-detail-meta" });
       this.tips.attach(r, target);

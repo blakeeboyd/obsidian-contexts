@@ -734,15 +734,14 @@
 
 .contexts-map-nav.is-current rect {
   fill: var(--interactive-accent);
+  fill-opacity: 0.16;
   stroke: var(--interactive-accent);
+  stroke-width: 1.5px;
 }
 
 .contexts-map-nav.is-current .contexts-map-nav-label {
-  fill: var(--text-on-accent);
-}
-
-.contexts-map-nav.is-current .contexts-map-nav-dot {
-  fill: var(--text-on-accent) !important;
+  fill: var(--text-normal);
+  font-weight: 650;
 }
 
 .contexts-map-nav.is-selected rect {

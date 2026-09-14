@@ -733,8 +733,9 @@
 }
 
 .contexts-map-nav.is-current rect {
-  fill: var(--interactive-accent);
-  fill-opacity: 0.16;
+  /* Opaque accent wash: color-mix, never opacity — connectors must not
+     show through the pill. */
+  fill: color-mix(in srgb, var(--interactive-accent) 16%, var(--background-primary));
   stroke: var(--interactive-accent);
   stroke-width: 1.5px;
 }
@@ -859,4 +860,17 @@
 
 .contexts-map-edge.is-two-way {
   marker-start: url(#contexts-map-arrow);
+}
+
+.contexts-map-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.contexts-map-range-row > span {
+  width: 42px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }

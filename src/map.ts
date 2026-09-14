@@ -1,6 +1,6 @@
-import { ItemView, Keymap, Menu, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import { isSpan } from "./recorder";
 import type ContextsPlugin from "./main";
-import { NameModal } from "./main";
 import { PALETTE, UNASSIGNED_COLOR } from "./braid";
 import { fmtClock, fmtDur, relDay } from "./format";
 import { HoverTip } from "./tip";
@@ -21,19 +21,63 @@ import {
   groupSessions,
   healRenames,
   layoutNavTree,
+  localDay,
   pairKey,
 } from "./views";
 
 export const MAP_VIEW_TYPE = "contexts-map";
 
 /** Scope: which slice of the record the map draws. */
-type MapScope = "session" | "day" | "context" | "all";
+type MapScope = "session" | "day" | "context" | "range" | "all";
 const SCOPES: { key: MapScope; label: string }[] = [
   { key: "session", label: "Session" },
   { key: "day", label: "Today" },
   { key: "context", label: "Context" },
+  { key: "range", label: "Range" },
   { key: "all", label: "All" },
 ];
+
+/**
+ * The range picker: start and end day, offered ONLY from days that actually
+ * hold recorded activity — a calendar full of dead days would be noise.
+ */
+class RangeModal extends Modal {
+  constructor(
+    app: App,
+    private days: number[], // local-midnight timestamps of active days, ascending
+    private initial: { from: number; to: number } | null,
+    private onPick: (from: number, to: number) => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    this.titleEl.setText("Show activity between");
+    const fmt = (t: number) =>
+      new Date(t).toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric", year: "2-digit" });
+    const mk = (label: string, value: number) => {
+      const row = this.contentEl.createDiv({ cls: "contexts-map-range-row" });
+      row.createSpan({ text: label });
+      const sel = row.createEl("select", { cls: "contexts-map-select" });
+      for (const day of this.days) sel.createEl("option", { text: fmt(day), value: String(day) });
+      sel.value = String(value);
+      return sel;
+    };
+    const start = mk("From", this.initial?.from ?? this.days[0]);
+    const end = mk("To", this.initial ? this.initial.to : this.days[this.days.length - 1]);
+    const btn = this.contentEl.createEl("button", { text: "Show", cls: "mod-cta" });
+    btn.addEventListener("click", () => {
+      const a = Number(start.value);
+      const b = Number(end.value);
+      this.close();
+      this.onPick(Math.min(a, b), Math.max(a, b));
+    });
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
 
 const LEFT_X = 110; // room for session labels left of each root
 const TREE_GAP = 56;
@@ -63,7 +107,8 @@ export class MapView extends ItemView {
   // Engagement wash: each pill tinted its context color, deeper with more
   // engaged time, so the worked-in files catch the eye first.
   private showEngagement = true;
-  private customDays = 7;
+  // Range scope: chosen start/end days (local midnights), from the picker.
+  private range: { from: number; to: number } | null = null;
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -152,11 +197,24 @@ export class MapView extends ItemView {
     // Header: scope control in the braid's segmented register.
     const header = contentEl.createDiv({ cls: "contexts-braid-header" });
     const seg = header.createDiv({ cls: "contexts-braid-seg" });
+    // Days that actually hold activity, for the range picker.
+    const activeDays = [...new Set(relEvents.filter(isSpan).map((sp) => localDay(sp.start)))].sort((a, b) => a - b);
     for (const { key, label } of SCOPES) {
       if (key === "context" && !names.length) continue;
       const b = seg.createEl("button", { text: label, cls: "contexts-braid-seg-btn" });
       if (key === this.mapScope) b.addClass("is-active");
       b.addEventListener("click", () => {
+        if (key === "range") {
+          // Range always goes through the picker; clicking again re-opens it.
+          if (!activeDays.length) return;
+          new RangeModal(this.app, activeDays, this.range, (from, to) => {
+            this.range = { from, to };
+            this.mapScope = "range";
+            this.manualVB = null;
+            void this.render();
+          }).open();
+          return;
+        }
         this.mapScope = key;
         this.manualVB = null; // a new scope is a new picture; refit
         void this.render();
@@ -207,21 +265,6 @@ export class MapView extends ItemView {
       group("A tree per day", "day");
       group("A tree per week", "week");
       group("A tree per month", "month");
-      menu.addItem((i) =>
-        i
-          .setTitle(`A tree per ${this.customDays} days (custom)…`)
-          .setChecked(this.groupBy === "custom")
-          .onClick(() => {
-            new NameModal(this.app, "Days per tree:", String(this.customDays), (v) => {
-              const n = parseInt(v, 10);
-              if (!Number.isFinite(n) || n < 1) return;
-              this.customDays = n;
-              this.groupBy = "custom";
-              this.manualVB = null;
-              void this.render();
-            }).open();
-          })
-      );
       menu.addSeparator();
       menu.addItem((i) =>
         i
@@ -270,7 +313,13 @@ export class MapView extends ItemView {
       if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
-    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy, this.customDays);
+    else if (this.mapScope === "range" && this.range) {
+      scopeArg.from = this.range.from;
+      // End day inclusive: up to the local midnight after it.
+      const d = new Date(this.range.to);
+      scopeArg.to = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1;
+    }
+    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy);
     if (this.newestFirst) trees.reverse();
     if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
@@ -474,12 +523,7 @@ export class MapView extends ItemView {
           ? d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
           : relDay(tree.start);
       label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = line1;
-      const line2 =
-        this.groupBy === "week" || this.groupBy === "month"
-          ? relDay(tree.start)
-          : this.groupBy === "custom"
-          ? `${this.customDays}-day span`
-          : fmtClock(tree.start);
+      const line2 = this.groupBy === "week" || this.groupBy === "month" ? relDay(tree.start) : fmtClock(tree.start);
       label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
 
       // Hover wiring: every edge registers with both endpoints, so mousing
@@ -561,11 +605,13 @@ export class MapView extends ItemView {
         } else {
           const h = heightOf(n.path);
           const rect = g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
-          // The engagement wash: context color, deeper with engaged time.
-          // The current file keeps its accent wash instead.
+          // The engagement wash: context color, deeper with engaged time —
+          // blended OPAQUE into the background (color-mix, not opacity), so
+          // connectors never show through behind the text. The current file
+          // keeps its accent wash instead.
           if (this.showEngagement && !(n.path === current && tree === trailTree)) {
-            rect.style.fill = colorOf(n.ctx);
-            rect.style.fillOpacity = `${0.05 + 0.3 * heat}`;
+            const pct = Math.round(5 + 30 * heat);
+            rect.style.fill = `color-mix(in srgb, ${colorOf(n.ctx)} ${pct}%, var(--background-primary))`;
           }
           g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
             colorOf(n.ctx);

@@ -137,7 +137,7 @@ describe("buildNavForest", () => {
     expect(byWeek.map((t) => t.root.path)).toEqual(["MonA.md", "Next.md"]);
   });
 
-  it("groups by month and by a custom day count", () => {
+  it("groups by month", () => {
     const events: LogEvent[] = [
       span("Jan.md", new Date(2026, 0, 5, 9).getTime()),
       span("JanLater.md", new Date(2026, 0, 20, 9).getTime()),
@@ -145,9 +145,6 @@ describe("buildNavForest", () => {
     ];
     const byMonth = buildNavForest(events, {}, undefined, "month");
     expect(byMonth.map((t) => t.root.path)).toEqual(["Jan.md", "Feb.md"]);
-    // A 1-day custom span is exactly day grouping.
-    const byOne = buildNavForest(events, {}, undefined, "custom", 1);
-    expect(byOne.map((t) => t.root.path)).toEqual(["Jan.md", "JanLater.md", "Feb.md"]);
   });
 });
 

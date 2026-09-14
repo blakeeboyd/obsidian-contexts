@@ -1,24 +1,24 @@
 import { ItemView, Keymap, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type ContextsPlugin from "./main";
 import { PALETTE, UNASSIGNED_COLOR } from "./braid";
-import { fmtDur } from "./format";
+import { fmtClock, fmtDur, relDay } from "./format";
 import { HoverTip } from "./tip";
 import {
-  CognitionGraph,
-  MapPos,
+  NAV_H_GAP,
+  NAV_ROW_H,
+  NavNode,
+  NavTree,
   applyErasures,
   applyRenames,
   assignContexts,
-  buildCognitionGraph,
+  buildNavForest,
   contextNames,
   contextRuns,
   excludeFolders,
   fileContexts,
-  forceTick,
   groupSessions,
   healRenames,
-  seedPos,
-  unrelatedPairs,
+  layoutNavTree,
 } from "./views";
 
 export const MAP_VIEW_TYPE = "contexts-map";
@@ -32,28 +32,26 @@ const SCOPES: { key: MapScope; label: string }[] = [
   { key: "all", label: "All" },
 ];
 
-const R_MIN = 5;
-const R_MAX = 18;
-const LABELED = 30; // labels only on the heaviest nodes; hover carries the rest
+const LEFT_X = 110; // room for session labels left of each root
+const TREE_GAP = 56;
+const NODE_H = 24;
+const MAX_LABEL_W = 180;
 
 /**
- * The cognition map: the spatial view of the working set. Nodes are files
- * sized by engaged time (edits boosted), colored by dominant context with the
- * braid's palette; edges are the graded behavioral evidence. A small force
- * simulation settles positions, which persist across re-renders so the map
- * is a stable place, not a reshuffle.
+ * The cognition map: how the user moved through the work. One tree per
+ * session, rooted at the session's first note, children in visit order —
+ * what was opened from where, what was written (edited files read bold),
+ * with the trail to the current file lit in the accent color. Secondary
+ * arrivals and peeks are the quiet cross-curves.
  */
 export class MapView extends ItemView {
   private mapScope: MapScope = "day";
   private ctxChoice: string | null = null;
   private selected: string | null = null;
-  private pos = new Map<string, MapPos>();
   private tips = new HoverTip();
-  private raf = 0;
-  private alpha = 0;
   private svgEl: SVGSVGElement | null = null;
-  // Auto-fit bounds, updated every sim frame; the untouched view tracks them.
-  private fitVB = { x: -100, y: -100, w: 200, h: 200 };
+  // Auto-fit bounds; the untouched view tracks them.
+  private fitVB = { x: 0, y: -30, w: 400, h: 200 };
   // A zoom or pan freezes the viewport here (kept across re-renders); Fit clears it.
   private manualVB: { x: number; y: number; w: number; h: number } | null = null;
 
@@ -78,7 +76,6 @@ export class MapView extends ItemView {
   }
 
   async onClose(): Promise<void> {
-    cancelAnimationFrame(this.raf);
     this.tips.destroy();
   }
 
@@ -121,7 +118,6 @@ export class MapView extends ItemView {
   }
 
   async render(): Promise<void> {
-    cancelAnimationFrame(this.raf);
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("contexts-braid-view");
@@ -142,6 +138,7 @@ export class MapView extends ItemView {
       if (key === this.mapScope) b.addClass("is-active");
       b.addEventListener("click", () => {
         this.mapScope = key;
+        this.manualVB = null; // a new scope is a new picture; refit
         void this.render();
       });
     }
@@ -152,6 +149,7 @@ export class MapView extends ItemView {
       this.ctxChoice = pick.value;
       pick.addEventListener("change", () => {
         this.ctxChoice = pick.value;
+        this.manualVB = null;
         void this.render();
       });
     }
@@ -169,25 +167,27 @@ export class MapView extends ItemView {
       this.applyVB();
     });
     header.createSpan({
-      text: "click a node for its detail · ⌘-click opens the file · ⌘-scroll zooms · drag pans",
+      text: "click a note for its detail · ⌘-click opens it · ⌘-scroll zooms · drag pans",
       cls: "contexts-braid-hint",
     });
 
-    const now = Date.now();
-    const sessions = groupSessions(relEvents, gapMs);
     const scopeArg: { from?: number; to?: number; ctx?: string } = {};
-    if (this.mapScope === "session" && sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
-    else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+    if (this.mapScope === "session") {
+      const sessions = groupSessions(relEvents, gapMs);
+      if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
+    } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
-    const graph = buildCognitionGraph(relEvents, now, scopeArg, gapMs, undefined, unrelatedPairs(relEvents));
-    if (!graph.nodes.length) {
+    const trees = buildNavForest(relEvents, scopeArg, gapMs);
+    if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
       return;
     }
 
     // Context colors: same palette, same first-appearance order as the braid's bands.
     const bandOrder: string[] = [];
-    for (const r of contextRuns(sessions, assignContexts(relEvents))) if (!bandOrder.includes(r.ctx)) bandOrder.push(r.ctx);
+    for (const r of contextRuns(groupSessions(relEvents, gapMs), assignContexts(relEvents))) {
+      if (!bandOrder.includes(r.ctx)) bandOrder.push(r.ctx);
+    }
     const colored = bandOrder.filter((c) => c !== "");
     const colorOf = (ctx: string) => {
       if (ctx === "") return UNASSIGNED_COLOR;
@@ -195,12 +195,42 @@ export class MapView extends ItemView {
       return PALETTE[(i === -1 ? colored.length : i) % PALETTE.length];
     };
 
-    const maxW = graph.nodes[0].weight || 1;
-    const rOf = new Map(graph.nodes.map((n) => [n.path, R_MIN + (R_MAX - R_MIN) * Math.sqrt(n.weight / maxW)]));
-    const maxScore = graph.edges[0]?.score || 1;
+    // Label widths from real text metrics, so columns stagger like Tangent's.
+    const canvas = document.createElement("canvas");
+    const mctx = canvas.getContext("2d")!;
+    mctx.font = `500 12px ${getComputedStyle(document.body).fontFamily}`;
+    const widths = new Map<string, number>();
+    const baseOf = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+    const widthOf = (path: string) => {
+      let w = widths.get(path);
+      if (w === undefined) widths.set(path, (w = Math.min(mctx.measureText(baseOf(path)).width, MAX_LABEL_W) + 32));
+      return w;
+    };
 
-    // Seed new nodes, keep the rest where they settled.
-    for (const n of graph.nodes) if (!this.pos.has(n.path)) this.pos.set(n.path, seedPos(n.path));
+    // Stack the session trees; remember where every path last appeared for
+    // trails and the detail panel (the latest session is the one that counts).
+    const placements: { tree: NavTree; pos: Map<NavNode, { x: number; y: number; w: number }> }[] = [];
+    const latestNode = new Map<string, { tree: NavTree; node: NavNode }>();
+    let yCursor = 0;
+    for (const tree of trees) {
+      const { pos, height } = layoutNavTree(tree.root, widthOf, LEFT_X, yCursor);
+      placements.push({ tree, pos });
+      for (const n of pos.keys()) latestNode.set(n.path, { tree, node: n });
+      yCursor += height + TREE_GAP;
+    }
+
+    // The trail: root → the file the user is in right now, in its latest tree.
+    const current = this.plugin.lastActiveMdPath;
+    const trail = new Set<string>();
+    let trailTree: NavTree | null = null;
+    if (current && latestNode.has(current)) {
+      trailTree = latestNode.get(current)!.tree;
+      let p: string | null | undefined = current;
+      while (p) {
+        trail.add(p);
+        p = trailTree.parentOf.get(p);
+      }
+    }
 
     const main = contentEl.createDiv({ cls: "contexts-braid-main" });
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
@@ -249,91 +279,94 @@ export class MapView extends ItemView {
       svg.addEventListener("pointercancel", up);
     });
 
-    const edgeEls: { el: SVGLineElement; a: string; b: string }[] = [];
-    for (const e of graph.edges) {
-      const line = svg.createSvg("line", { cls: "contexts-map-edge" });
-      if (e.kind === "peek") line.addClass("is-peek");
-      line.style.strokeWidth = `${0.6 + 2 * (e.score / maxScore)}px`;
-      line.style.opacity = `${0.25 + 0.45 * (e.score / maxScore)}`;
-      edgeEls.push({ el: line, a: e.a, b: e.b });
+    // A soft S-curve with horizontal tangents: the Tangent connector.
+    const curve = (x1: number, y1: number, x2: number, y2: number) => {
+      const mx = (x1 + x2) / 2;
+      return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+    };
+
+    for (const { tree, pos } of placements) {
+      const at = new Map<string, { x: number; y: number; w: number }>();
+      for (const [n, p] of pos) at.set(n.path, p);
+      const onTrail = (path: string) => tree === trailTree && trail.has(path);
+
+      // Session label, left of the root: the day, then the clock.
+      const rootPos = pos.get(tree.root)!;
+      const label = svg.createSvg("text", {
+        attr: { x: LEFT_X - 14, y: rootPos.y - 2, "text-anchor": "end" },
+        cls: "contexts-map-session",
+      });
+      label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = relDay(tree.start);
+      label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent =
+        fmtClock(tree.start);
+
+      // Tree edges first (under the nodes), then secondary curves, then nodes.
+      const drawEdges = (n: NavNode) => {
+        const pp = pos.get(n)!;
+        for (const c of n.children) {
+          const cp = pos.get(c)!;
+          const path = svg.createSvg("path", {
+            attr: { d: curve(pp.x + pp.w, pp.y, cp.x, cp.y) },
+            cls: "contexts-map-edge",
+          });
+          if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
+          drawEdges(c);
+        }
+      };
+      drawEdges(tree.root);
+      for (const link of tree.links) {
+        const fp = at.get(link.from);
+        const tp = at.get(link.to);
+        if (!fp || !tp) continue;
+        svg.createSvg("path", {
+          attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
+          cls: `contexts-map-edge is-${link.kind}`,
+        });
+      }
+      for (const [n, p] of pos) {
+        const g = svg.createSvg("g", { cls: "contexts-map-nav" });
+        if (n.edits) g.addClass("is-edited");
+        if (onTrail(n.path)) g.addClass("is-trail");
+        if (n.path === current && tree === trailTree) g.addClass("is-current");
+        if (n.path === this.selected) g.addClass("is-selected");
+        g.createSvg("rect", { attr: { x: p.x, y: p.y - NODE_H / 2, width: p.w, height: NODE_H, rx: 6 } });
+        g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
+          colorOf(n.ctx);
+        g.createSvg("text", { attr: { x: p.x + 21, y: p.y + 4 }, cls: "contexts-map-nav-label" }).textContent = baseOf(
+          n.path
+        );
+        this.tips.attach(
+          g,
+          `${n.path} · ${fmtClock(n.firstAt)} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${
+            n.edits ? `${n.edits} edit${n.edits === 1 ? "" : "s"}` : "read only"
+          }${n.ctx ? ` · ${n.ctx}` : ""}`
+        );
+        g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
+      }
     }
-    const nodeEls: { g: SVGGElement; path: string }[] = [];
-    graph.nodes.forEach((n, i) => {
-      const g = svg.createSvg("g", { cls: "contexts-map-node" });
-      if (n.path === this.selected) g.addClass("is-selected");
-      const r = rOf.get(n.path)!;
-      const circle = g.createSvg("circle", { attr: { r } });
-      circle.style.fill = colorOf(n.ctx);
-      circle.style.fillOpacity = `${0.45 + 0.55 * Math.sqrt(n.weight / maxW)}`;
-      const base = n.path.split("/").pop()?.replace(/\.md$/, "") ?? n.path;
-      if (i < LABELED || n.path === this.selected) {
-        g.createSvg("text", { attr: { x: r + 4, y: 3 }, cls: "contexts-map-label" }).textContent = base;
-      }
-      this.tips.attach(
-        g,
-        `${n.path} · ${fmtDur(n.dur)} engaged · ${n.visits} visit${n.visits === 1 ? "" : "s"} · ${n.edits} edit${n.edits === 1 ? "" : "s"}${n.ctx ? ` · ${n.ctx}` : ""}`
-      );
-      g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
-      nodeEls.push({ g, path: n.path });
-    });
 
-    const paths = graph.nodes.map((n) => n.path);
-    const radius = (p: string) => rOf.get(p) ?? R_MIN;
-    const draw = () => {
-      for (const { el, a, b } of edgeEls) {
-        const pa = this.pos.get(a)!;
-        const pb = this.pos.get(b)!;
-        el.setAttribute("x1", pa.x.toFixed(1));
-        el.setAttribute("y1", pa.y.toFixed(1));
-        el.setAttribute("x2", pb.x.toFixed(1));
-        el.setAttribute("y2", pb.y.toFixed(1));
-      }
-      for (const { g, path } of nodeEls) {
-        const p = this.pos.get(path)!;
-        g.setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
-      }
-      // Auto-fit bounds track the settled layout; the viewBox follows them
-      // until a zoom or pan freezes a manual viewport.
-      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const p of paths) {
-        const n = this.pos.get(p)!;
-        const r = radius(p) + 30;
-        x0 = Math.min(x0, n.x - r);
-        y0 = Math.min(y0, n.y - r);
-        x1 = Math.max(x1, n.x + r + 90); // room for labels
-        y1 = Math.max(y1, n.y + r);
-      }
-      this.fitVB = { x: x0, y: y0, w: Math.max(x1 - x0, 200), h: Math.max(y1 - y0, 200) };
-      this.applyVB();
-    };
-
-    // Settle incrementally: hot start only when new nodes arrived, warm otherwise.
-    this.alpha = graph.nodes.some((n) => this.pos.get(n.path)!.vx === 0 && this.pos.get(n.path)!.vy === 0) ? 1 : 0.3;
-    const step = () => {
-      forceTick(paths, graph.edges, this.pos, this.alpha, radius);
-      draw();
-      this.alpha *= 0.96;
-      if (this.alpha > 0.02) this.raf = requestAnimationFrame(step);
-    };
-    draw();
-    this.raf = requestAnimationFrame(step);
+    // Auto-fit bounds; the viewBox follows them until a zoom or pan freezes a manual viewport.
+    let x1 = 0;
+    for (const { pos } of placements) for (const p of pos.values()) x1 = Math.max(x1, p.x + p.w);
+    this.fitVB = { x: 0, y: -NAV_ROW_H, w: Math.max(x1 + 40, 400), h: Math.max(yCursor - TREE_GAP + NAV_ROW_H * 2, 200) };
+    this.applyVB();
 
     if (this.selected) {
-      const sel = graph.nodes.find((n) => n.path === this.selected);
-      if (sel) this.renderDetail(main, relEvents, graph, sel.path, colorOf, sel);
+      const found = latestNode.get(this.selected);
+      if (found) this.renderDetail(main, relEvents, found.tree, found.node, colorOf);
       else this.selected = null;
     }
   }
 
-  /** The node detail, braid-register: identity, contexts, stats, strongest neighbors. */
+  /** The node detail, braid-register: identity, contexts, stats, and the movement around it. */
   private renderDetail(
     main: HTMLElement,
     relEvents: Parameters<typeof fileContexts>[0],
-    graph: CognitionGraph,
-    path: string,
-    colorOf: (ctx: string) => string,
-    node: { dur: number; visits: number; edits: number }
+    tree: NavTree,
+    node: NavNode,
+    colorOf: (ctx: string) => string
   ): void {
+    const path = node.path;
     const panel = main.createDiv({ cls: "contexts-braid-detail" });
     const head = panel.createDiv({ cls: "contexts-braid-detail-head" });
     const nameRow = head.createDiv({ cls: "contexts-braid-detail-name" });
@@ -352,7 +385,9 @@ export class MapView extends ItemView {
     }
     head.createDiv({ text: path, cls: "contexts-braid-detail-path" });
     head.createDiv({
-      text: `${fmtDur(node.dur)} engaged · ${node.visits} visit${node.visits === 1 ? "" : "s"} · ${node.edits} edit${node.edits === 1 ? "" : "s"} in scope`,
+      text: `${fmtDur(node.dur)} engaged · ${node.visits} visit${node.visits === 1 ? "" : "s"} · ${node.edits} edit${
+        node.edits === 1 ? "" : "s"
+      } this session`,
       cls: "contexts-braid-detail-stats",
     });
     const openLink = head.createDiv({ text: "Open file", cls: "contexts-braid-detail-open" });
@@ -362,21 +397,32 @@ export class MapView extends ItemView {
     });
 
     const list = panel.createDiv({ cls: "contexts-braid-detail-list" });
-    const neighbors = graph.edges
-      .filter((e) => e.a === path || e.b === path)
-      .map((e) => ({ other: e.a === path ? e.b : e.a, score: e.score, kind: e.kind }))
-      .slice(0, 20);
-    if (!neighbors.length) {
-      list.createDiv({ text: "No graded evidence links this file yet.", cls: "contexts-empty" });
-      return;
+    const row = (label: string, target: string, meta?: string) => {
+      const r = list.createDiv({ cls: "contexts-braid-detail-row contexts-map-related" });
+      r.createSpan({ text: target.split("/").pop()?.replace(/\.md$/, "") ?? target });
+      r.createSpan({ text: meta ?? label, cls: "contexts-braid-detail-meta" });
+      this.tips.attach(r, target);
+      r.addEventListener("click", (evt) => this.nodeClick(evt, target));
+    };
+    const parent = tree.parentOf.get(path);
+    if (parent) {
+      list.createDiv({ cls: "contexts-braid-detail-day" }).createSpan({ text: "Came from" });
+      row("came from", parent, fmtClock(node.firstAt));
     }
-    list.createDiv({ cls: "contexts-braid-detail-day" }).createSpan({ text: "Related" });
-    for (const nb of neighbors) {
-      const row = list.createDiv({ cls: "contexts-braid-detail-row contexts-map-related" });
-      row.createSpan({ text: nb.other.split("/").pop()?.replace(/\.md$/, "") ?? nb.other });
-      row.createSpan({ text: `${nb.kind} · ${nb.score.toFixed(1)}`, cls: "contexts-braid-detail-meta" });
-      this.tips.attach(row, nb.other);
-      row.addEventListener("click", (evt) => this.nodeClick(evt, nb.other));
+    if (node.children.length) {
+      list.createDiv({ cls: "contexts-braid-detail-day" }).createSpan({ text: "Opened from here" });
+      for (const c of node.children) row("opened", c.path, fmtClock(c.firstAt));
+    }
+    const also = tree.links.filter((l) => l.to === path || l.from === path);
+    if (also.length) {
+      list.createDiv({ cls: "contexts-braid-detail-day" }).createSpan({ text: "Also crossed" });
+      for (const l of also) {
+        const other = l.to === path ? l.from : l.to;
+        row(l.kind, other, l.kind === "peek" ? "peeked" : l.to === path ? "returned from" : "returned to");
+      }
+    }
+    if (!parent && !node.children.length && !also.length) {
+      list.createDiv({ text: "The session started here and stayed.", cls: "contexts-empty" });
     }
   }
 }

@@ -658,6 +658,11 @@
   flex: 1;
   min-width: 0;
   height: 100%;
+  cursor: grab;
+}
+
+.contexts-map-svg:active {
+  cursor: grabbing;
 }
 
 .contexts-map-select {
@@ -671,41 +676,89 @@
 }
 
 .contexts-map-edge {
-  stroke: var(--text-faint);
   fill: none;
+  stroke: var(--background-modifier-border-hover);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-edge.is-revisit {
+  stroke: var(--background-modifier-border);
 }
 
 .contexts-map-edge.is-peek {
+  stroke: var(--background-modifier-border);
   stroke-dasharray: 2 3;
 }
 
-.contexts-map-node {
+.contexts-map-edge.is-trail {
+  stroke: var(--interactive-accent);
+  stroke-width: 2.5px;
+}
+
+.contexts-map-nav {
   cursor: pointer;
 }
 
-.contexts-map-node circle {
-  stroke: transparent;
-  stroke-width: 2px;
-  transition: fill-opacity 0.12s ease, stroke 0.12s ease;
+.contexts-map-nav rect {
+  fill: var(--background-primary);
+  stroke: var(--background-modifier-border);
+  stroke-width: 1px;
+  transition: stroke 0.12s ease, fill 0.12s ease;
 }
 
-.contexts-map-node:hover circle {
-  fill-opacity: 1 !important;
+.contexts-map-nav:hover rect {
+  stroke: var(--background-modifier-border-focus);
 }
 
-.contexts-map-node.is-selected circle {
-  stroke: var(--text-normal);
-}
-
-.contexts-map-label {
-  font-size: 10px;
+.contexts-map-nav-label {
+  font-size: 12px;
+  font-weight: 500;
   fill: var(--text-muted);
   pointer-events: none;
 }
 
-.contexts-map-node.is-selected .contexts-map-label,
-.contexts-map-node:hover .contexts-map-label {
+.contexts-map-nav:hover .contexts-map-nav-label {
   fill: var(--text-normal);
+}
+
+.contexts-map-nav.is-edited .contexts-map-nav-label {
+  font-weight: 650;
+  fill: var(--text-normal);
+}
+
+.contexts-map-nav.is-trail rect {
+  stroke: var(--interactive-accent);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-nav.is-current rect {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent);
+}
+
+.contexts-map-nav.is-current .contexts-map-nav-label {
+  fill: var(--text-on-accent);
+}
+
+.contexts-map-nav.is-current .contexts-map-nav-dot {
+  fill: var(--text-on-accent) !important;
+}
+
+.contexts-map-nav.is-selected rect {
+  stroke: var(--text-normal);
+  stroke-width: 1.5px;
+}
+
+.contexts-map-session {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--text-normal);
+}
+
+.contexts-map-session-time {
+  font-size: 10px;
+  font-weight: 400;
+  fill: var(--text-faint);
 }
 
 .contexts-map-related {
@@ -718,12 +771,4 @@
 .contexts-map-related:hover {
   background: var(--background-secondary);
   border-radius: 4px;
-}
-
-.contexts-map-svg {
-  cursor: grab;
-}
-
-.contexts-map-svg:active {
-  cursor: grabbing;
 }

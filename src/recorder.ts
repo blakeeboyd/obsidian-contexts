@@ -307,6 +307,8 @@ export interface SpanEvent {
   /** Heading section the cursor was in when the visit ended — section-grain attention. */
   section?: string;
   edit?: EditDelta;
+  /** Read-time device tag (see DeviceTag); on SpanEvent directly because isSpan narrows past the intersection. */
+  device?: string;
 }
 
 export type LeaveReason = "switch" | "close" | "blur" | "idle" | "quit" | "pause";
@@ -523,8 +525,16 @@ export interface EraseEvent {
   to: number;
 }
 
-export type LogEvent =
-  | SpanEvent
+/**
+ * Which device's shard an event came from — attached AT READ TIME from the
+ * shard filename, never written into the log (the filename is the truth).
+ * The shards are one logical log; this field is how a merged event still
+ * knows its hands.
+ */
+export type DeviceTag = { device?: string };
+
+export type LogEvent = DeviceTag &
+  ( | SpanEvent
   | RenameEvent
   | DeleteEvent
   | CreateEvent
@@ -538,7 +548,7 @@ export type LogEvent =
   | EvictEvent
   | NoteEvent
   | ReassignEvent
-  | EraseEvent;
+  | EraseEvent );
 
 /** Baseline counts from a snapshot (zeros for signals whose capture is off). */
 export function firstSeenCounts(snap: Snapshot): FirstSeenEvent["counts"] {

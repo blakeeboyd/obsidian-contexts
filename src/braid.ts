@@ -598,6 +598,7 @@ export class BraidView extends ItemView {
         if (sp.via === "link" && sp.from) meta.push(`via link from ${sp.from.split("/").pop()?.replace(/\.md$/, "")}`);
         else if (sp.via) meta.push(`via ${sp.via}`);
         if (sp.section) meta.push(`§ ${sp.section}`);
+        if (sp.device && sp.device !== this.plugin.localDeviceId()) meta.push(`on ${this.plugin.deviceLabel(sp.device)}`);
         if (meta.length) row.createDiv({ text: meta.join(" · "), cls: "contexts-braid-detail-meta" });
       } else if (item.act) {
         const ev = item.act;

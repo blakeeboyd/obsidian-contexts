@@ -52,21 +52,29 @@ export class EventLog {
 
   async append(ev: LogEvent): Promise<void> {
     await this.ensureDir();
-    await this.adapter.append(this.shardPath(ev.t), JSON.stringify(ev) + "\n");
+    // `device` is derived (the shard filename is the truth) — never persisted.
+    await this.adapter.append(this.shardPath(ev.t), JSON.stringify(ev, (k, v) => (k === "device" ? undefined : v)) + "\n");
   }
 
-  /** All events across every shard (any device), oldest first. */
+  /**
+   * All events across every shard (any device), oldest first — one logical
+   * log. Each event is tagged with the device its shard belongs to, so a
+   * merged stint still knows which hands it came from.
+   */
   async readAll(): Promise<LogEvent[]> {
     if (!(await this.adapter.exists(this.dir))) return [];
     const { files } = await this.adapter.list(this.dir);
     const events: LogEvent[] = [];
     for (const f of files) {
       if (!f.endsWith(".jsonl")) continue;
+      const device = f.match(/([^/]+)-\d{4}-\d{2}\.jsonl$/)?.[1];
       const text = await this.adapter.read(f);
       for (const line of text.split("\n")) {
         if (!line.trim()) continue;
         try {
-          events.push(JSON.parse(line));
+          const ev = JSON.parse(line) as LogEvent;
+          if (device) ev.device = device;
+          events.push(ev);
         } catch {
           // ponytail: skip corrupt/truncated lines (crash mid-append) rather than fail the read
         }
@@ -74,5 +82,17 @@ export class EventLog {
     }
     events.sort((a, b) => a.t - b.t);
     return events;
+  }
+
+  /** Device ids that have shards on disk, this device first. */
+  async listDevices(): Promise<string[]> {
+    if (!(await this.adapter.exists(this.dir))) return [this.deviceId];
+    const { files } = await this.adapter.list(this.dir);
+    const ids = new Set<string>([this.deviceId]);
+    for (const f of files) {
+      const m = f.match(/([^/]+)-\d{4}-\d{2}\.jsonl$/);
+      if (m) ids.add(m[1]);
+    }
+    return [...ids];
   }
 }

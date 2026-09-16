@@ -63,6 +63,9 @@ export interface ContextsSettings {
   // visited under, but opening one never pulls the declaration — they
   // bridge contexts instead of belonging to one.
   bridgeFolders: string[];
+  // Display names for device ids ("Mac", "iPhone"); the log stays one
+  // logical stream, this is how a stint's hands get a human name.
+  deviceNames: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -97,6 +100,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   paused: false,
   excludedFolders: [],
   bridgeFolders: [],
+  deviceNames: {},
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -189,6 +193,30 @@ export class ContextsSettingTab extends PluginSettingTab {
       );
 
     this.folderList(containerEl, this.plugin.settings.bridgeFolders);
+
+    new Setting(containerEl)
+      .setName("Device names")
+      .setDesc(
+        "Each device writes its own log shard; the views merge them into one history. Name the ids so a stint reads \"iPhone\" instead of a random id."
+      )
+      .setHeading();
+    const deviceEl = containerEl.createDiv();
+    void (async () => {
+      for (const id of await this.plugin.listDevices()) {
+        new Setting(deviceEl)
+          .setName(id === this.plugin.localDeviceId() ? `${id} (this device)` : id)
+          .addText((t) =>
+            t
+              .setPlaceholder("Name")
+              .setValue(this.plugin.settings.deviceNames[id] ?? "")
+              .onChange(async (v) => {
+                if (v.trim()) this.plugin.settings.deviceNames[id] = v.trim();
+                else delete this.plugin.settings.deviceNames[id];
+                await this.plugin.saveSettings();
+              })
+          );
+      }
+    })();
 
     new Setting(containerEl).setName("Capture").setHeading()
       .setDesc("Everything is on by default. Turning a signal off skips its work entirely; it stops being recorded from that moment on.");

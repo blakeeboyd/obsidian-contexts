@@ -651,6 +651,9 @@ export class MapView extends ItemView {
           if (n.edits) meta.push(`${n.edits} edit${n.edits === 1 ? "" : "s"}`);
           if (n.created) meta.push("created here");
           meta.push(n.ctx || "no context");
+          const local = this.plugin.localDeviceId();
+          const devs = [...new Set(n.devices?.filter((d) => d !== local) ?? [])];
+          if (devs.length) meta.push(`on ${devs.map((d) => this.plugin.deviceLabel(d)).join(", ")}`);
           el.createDiv({ text: meta.join(" · "), cls: "contexts-tip-meta" });
         });
         g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));

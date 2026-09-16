@@ -660,9 +660,27 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async record(ev: LogEvent): Promise<void> {
+    // Tag the in-memory copy so live events match read-tagged ones; append's
+    // serializer strips the field (the shard filename is the persisted truth).
+    ev.device = getDeviceId();
     this.events?.push(ev);
     await this.log.append(ev);
     this.refreshPane();
+  }
+
+  /** A device's display name (settings), falling back to its id. */
+  deviceLabel(id: string): string {
+    return this.settings.deviceNames[id] || id;
+  }
+
+  /** The id of THIS device, for views that only label foreign events. */
+  localDeviceId(): string {
+    return getDeviceId();
+  }
+
+  /** Device ids with shards on disk, for the settings naming UI. */
+  listDevices(): Promise<string[]> {
+    return this.log.listDevices();
   }
 
   private dayBlocks = new Set<DayBlock>();

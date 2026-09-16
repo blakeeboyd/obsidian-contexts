@@ -299,7 +299,11 @@ export class ContextsPane extends ItemView {
         // changed the file, a book stint only read it.
         const line = row.createDiv({ cls: "contexts-event-line" });
         setIcon(line.createSpan({ cls: "contexts-chip-icon" }), ev.edit ? "pencil" : "book-open");
-        line.createSpan({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}` });
+        // A stint from another device says so; local stints stay quiet.
+        const local = this.plugin.localDeviceId();
+        const devices = [...new Set(ev.spans.map((sp) => sp.device).filter((d): d is string => !!d && d !== local))];
+        const devText = devices.length ? ` · ${devices.map((d) => this.plugin.deviceLabel(d)).join(", ")}` : "";
+        line.createSpan({ text: `${fmtTime(ev.start)} · ${fmtDur(ev.dur)}${stints}${stintCtx ? ` · ${stintCtx}` : ""}${devText}` });
         if (ev.edit) this.renderSummary(row.createDiv({ cls: "contexts-trail-delta" }), ev.edit);
         // The same correction menu as the braid's pills: right-click a stint
         // to move its visits to another context. Excluded files have no

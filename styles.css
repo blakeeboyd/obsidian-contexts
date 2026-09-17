@@ -280,16 +280,29 @@
   margin-right: 3px;
 }
 
+/* Context identity on the canvas is carried by sigils and stretch labels;
+   the marks themselves stay neutral (context colors live in the rail and
+   the braid). */
 .contexts-map-nav-sigil {
   font-size: 9px;
   font-weight: 600;
+  fill: var(--text-muted);
   pointer-events: none;
   user-select: none;
+}
+
+.contexts-map-nav-dot {
+  fill: var(--text-muted);
+}
+
+.contexts-map-mini {
+  fill: var(--text-muted);
 }
 
 .contexts-map-ctx-label {
   font-size: 10px;
   font-weight: 500;
+  fill: var(--text-muted);
   opacity: 0.85;
   pointer-events: none;
   user-select: none;
@@ -388,6 +401,40 @@
 .contexts-block-open svg {
   width: 15px;
   height: 15px;
+  display: block;
+}
+
+.contexts-map-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.contexts-map-scope-chip .contexts-chip-icon svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.contexts-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.contexts-editor-bar:hover {
+  color: var(--text-normal);
+}
+
+.contexts-editor-bar .contexts-chip-icon svg {
+  width: 13px;
+  height: 13px;
   display: block;
 }
 

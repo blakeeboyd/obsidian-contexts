@@ -1,4 +1,4 @@
-import { App, EventRef, FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
+import { App, EventRef, FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, Platform, Plugin, SuggestModal, TFile, parseYaml, setIcon } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId, migrateLogDir } from "./log";
 import { ContextsBlock } from "./dayblock";
@@ -213,8 +213,11 @@ export default class ContextsPlugin extends Plugin {
             const view = leaf.view as unknown as { render?: () => Promise<void> };
             if (typeof view.render === "function") void view.render();
           }
+          this.updateContextBars();
         })
       );
+      this.registerEvent(this.app.workspace.on("layout-change", () => this.updateContextBars()));
+      this.updateContextBars();
       // App loses/regains focus: close the span so time in other apps is not
       // counted as engagement, reopen it on return.
       this.registerDomEvent(window, "blur", () => this.enqueue(() => this.closeSpan(undefined, "blur")));
@@ -695,6 +698,8 @@ export default class ContextsPlugin extends Plugin {
 
   onunload() {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.barsToken++; // cancel any in-flight bar rebuild
+    for (const el of Array.from(document.querySelectorAll(".contexts-editor-bar"))) el.remove();
     // Fire-and-forget: usually completes before the process is gone, and the
     // reader survives a truncated final line if it doesn't.
     this.enqueue(() => this.closeSpan(undefined, "quit"));
@@ -797,7 +802,47 @@ export default class ContextsPlugin extends Plugin {
         }
       }
       for (const block of this.dayBlocks) void block.render();
+      this.updateContextBars();
     }, 250);
+  }
+
+  /**
+   * The context bar: a slim strip under each markdown tab's header showing
+   * the declared context, one tap to switch — the phone's stand-in for the
+   * sidebar pane's compass line. Rebuilt whole on every refresh (a few
+   * leaves at most); the guard token keeps overlapping async rebuilds from
+   * doubling the bars.
+   */
+  private barsToken = 0;
+  updateContextBars(): void {
+    const mode = this.settings.contextBar;
+    const show = mode === "always" || (mode === "mobile" && Platform.isMobile);
+    const token = ++this.barsToken;
+    void (async () => {
+      let ctx: string | null = null;
+      let sigil: string | undefined;
+      if (show) {
+        const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
+        ctx = currentContext(relEvents);
+        if (ctx) sigil = allSigils(relEvents).get(ctx);
+      }
+      if (token !== this.barsToken) return; // a newer rebuild superseded this one
+      for (const el of Array.from(document.querySelectorAll(".contexts-editor-bar"))) el.remove();
+      if (!show) return;
+      for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+        const header = leaf.view.containerEl.querySelector(".view-header");
+        if (!header) continue;
+        const bar = createDiv({ cls: "contexts-editor-bar" });
+        setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "compass");
+        bar.createSpan({
+          text: ctx ? `${sigil ? `${sigil} ` : ""}${ctx}` : "No context",
+          cls: "contexts-editor-bar-name",
+        });
+        bar.setAttribute("aria-label", "Declare or switch context");
+        bar.addEventListener("click", () => void this.openContextModal());
+        header.insertAdjacentElement("afterend", bar);
+      }
+    })();
   }
 
   /**

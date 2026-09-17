@@ -69,6 +69,10 @@ export interface ContextsSettings {
   // In-vault folder holding the log shards, so vault sync carries them
   // between devices (Obsidian Sync does not sync extra plugin-folder files).
   logFolder: string;
+  // The context bar above the editor (below the tab header): the declared
+  // context, one tap to switch. The phone has no room for the sidebar pane,
+  // so "mobile" is the default.
+  contextBar: "off" | "mobile" | "always";
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -105,6 +109,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   bridgeFolders: [],
   deviceNames: {},
   logFolder: "Contexts Log",
+  contextBar: "mobile",
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -250,6 +255,22 @@ export class ContextsSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl).setName("Display").setHeading();
+
+    new Setting(containerEl)
+      .setName("Context bar above the editor")
+      .setDesc("A slim bar under the tab header showing the declared context; tap it to switch. Made for the phone, where the sidebar pane is out of reach.")
+      .addDropdown((d) =>
+        d
+          .addOption("off", "Off")
+          .addOption("mobile", "Mobile only")
+          .addOption("always", "All devices")
+          .setValue(this.plugin.settings.contextBar)
+          .onChange(async (v) => {
+            this.plugin.settings.contextBar = v as ContextsSettings["contextBar"];
+            await this.plugin.saveSettings();
+            this.plugin.updateContextBars();
+          })
+      );
 
     new Setting(containerEl)
       .setName("Newest visits first")

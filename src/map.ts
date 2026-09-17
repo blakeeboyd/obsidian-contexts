@@ -35,12 +35,6 @@ export const MAP_VIEW_TYPE = "contexts-map";
 
 /** Scope: which TIME slice the map draws. Context filtering is the rail's solo, which composes with any of these. */
 type MapScope = "session" | "day" | "range" | "all";
-const SCOPES: { key: MapScope; label: string }[] = [
-  { key: "session", label: "Session" },
-  { key: "day", label: "Today" },
-  { key: "range", label: "Range" },
-  { key: "all", label: "All" },
-];
 
 /**
  * The range picker: start and end day, offered ONLY from days that actually
@@ -216,29 +210,61 @@ export class MapView extends ItemView {
       this.railOpen = !this.railOpen;
       void this.render();
     });
-    const seg = header.createDiv({ cls: "contexts-braid-seg" });
+    // Time scope as ONE chip naming the current selection, opening a preset
+    // menu with the custom range inside it — the pattern analytics tools
+    // converge on (Amplitude, Mixpanel, Mintlify, Seline: a date chip, not a
+    // segment row). Shows the chosen range's actual dates, takes a fraction
+    // of the width, and the menu is a native bottom sheet on mobile.
     // Days that actually hold activity, for the range picker.
     const activeDays = [...new Set(relEvents.filter(isSpan).map((sp) => localDay(sp.start)))].sort((a, b) => a - b);
-    for (const { key, label } of SCOPES) {
-      const b = seg.createEl("button", { text: label, cls: "contexts-braid-seg-btn" });
-      if (key === this.mapScope) b.addClass("is-active");
-      b.addEventListener("click", () => {
-        if (key === "range") {
-          // Range always goes through the picker; clicking again re-opens it.
-          if (!activeDays.length) return;
-          new RangeModal(this.app, activeDays, this.range, (from, to) => {
-            this.range = { from, to };
-            this.mapScope = "range";
-            this.manualVB = null;
-            void this.render();
-          }).open();
-          return;
-        }
-        this.mapScope = key;
-        this.manualVB = null; // a new scope is a new picture; refit
-        void this.render();
-      });
-    }
+    const fmtDay = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const scopeLabel =
+      this.mapScope === "session"
+        ? "This session"
+        : this.mapScope === "day"
+        ? "Today"
+        : this.mapScope === "all"
+        ? "All time"
+        : this.range
+        ? `${fmtDay(this.range.from)} - ${fmtDay(this.range.to)}`
+        : "Date range";
+    const chip = header.createEl("button", { cls: ["contexts-braid-seg-btn", "contexts-map-scope-chip"] });
+    setIcon(chip.createSpan({ cls: "contexts-chip-icon" }), "calendar");
+    chip.createSpan({ text: scopeLabel });
+    setIcon(chip.createSpan({ cls: "contexts-chip-icon" }), "chevron-down");
+    chip.setAttribute("aria-label", "Time scope");
+    chip.addEventListener("click", (evt) => {
+      const menu = new Menu();
+      const pick = (title: string, key: MapScope) =>
+        menu.addItem((i) =>
+          i
+            .setTitle(title)
+            .setChecked(this.mapScope === key)
+            .onClick(() => {
+              this.mapScope = key;
+              this.manualVB = null; // a new scope is a new picture; refit
+              void this.render();
+            })
+        );
+      pick("This session", "session");
+      pick("Today", "day");
+      menu.addItem((i) =>
+        i
+          .setTitle("Date range…")
+          .setChecked(this.mapScope === "range")
+          .onClick(() => {
+            if (!activeDays.length) return;
+            new RangeModal(this.app, activeDays, this.range, (from, to) => {
+              this.range = { from, to };
+              this.mapScope = "range";
+              this.manualVB = null;
+              void this.render();
+            }).open();
+          })
+      );
+      pick("All time", "all");
+      menu.showAtMouseEvent(evt);
+    });
     const zoomWrap = header.createDiv({ cls: "contexts-braid-zoom" });
     const zoomBtn = (icon: string, label: string, onClick: () => void) => {
       const b = zoomWrap.createEl("button", { cls: "contexts-braid-seg-btn" });
@@ -438,7 +464,6 @@ export class MapView extends ItemView {
       svg,
       trees,
       groupBy: this.groupBy,
-      colorOf,
       sigils,
       tips: this.tips,
       deviceLabel: (id) => this.plugin.deviceLabel(id),
@@ -679,7 +704,6 @@ export function drawForest(cfg: {
   svg: SVGSVGElement;
   trees: NavTree[];
   groupBy: NavGroup;
-  colorOf: (ctx: string) => string;
   sigils: Map<string, string>;
   tips: HoverTip;
   deviceLabel: (id: string) => string;
@@ -694,7 +718,6 @@ export function drawForest(cfg: {
 }): ForestDrawing {
   const svg = cfg.svg;
   const trees = cfg.trees;
-  const colorOf = cfg.colorOf;
   const sigils = cfg.sigils;
   // Label metrics from real text measurement, so columns stagger like
   // Tangent's. Long names wrap to two lines; anything longer ellipsizes
@@ -934,30 +957,27 @@ export function drawForest(cfg: {
         // A drive-by read: structure without a label. Hover says the rest.
         g.addClass("is-mini");
         const r = cfg.showEngagement ? 4 + 3 * heat : 5;
-        g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r }, cls: "contexts-map-mini" }).style.fill =
-          colorOf(n.ctx);
+        g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r }, cls: "contexts-map-mini" });
       } else {
         const h = heightOf(n.path);
         const rect = g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
-        // The engagement wash: context color, deeper with engaged time —
-        // blended OPAQUE into the background (color-mix, not opacity), so
-        // connectors never show through behind the text. The current file
-        // keeps its accent wash instead.
+        // The engagement wash: neutral, deeper with engaged time — blended
+        // OPAQUE into the background (color-mix, not opacity), so connectors
+        // never show through behind the text. Context identity rides the
+        // sigils and stretch labels; the canvas itself stays uncolored
+        // (Blake, 2026-09-17). The current file keeps its accent wash.
         if (cfg.showEngagement && !(n.path === current && tree === trailTree)) {
           const pct = Math.round(5 + 30 * heat);
-          rect.style.fill = `color-mix(in srgb, ${colorOf(n.ctx)} ${pct}%, var(--background-primary))`;
+          rect.style.fill = `color-mix(in srgb, var(--text-muted) ${pct}%, var(--background-primary))`;
         }
         const sig = sigils.get(n.ctx);
         if (sig) {
-          const t = g.createSvg("text", {
+          g.createSvg("text", {
             attr: { x: p.x + 12, y: p.y + 3, "text-anchor": "middle" },
             cls: "contexts-map-nav-sigil",
-          });
-          t.textContent = sig;
-          t.style.fill = colorOf(n.ctx);
+          }).textContent = sig;
         } else {
-          g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
-            colorOf(n.ctx);
+          g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" });
         }
         const lines = linesOf(n.path);
         const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
@@ -979,7 +999,6 @@ export function drawForest(cfg: {
           cls: "contexts-map-ctx-label",
         });
         sub.textContent = n.ctx;
-        sub.style.fill = colorOf(n.ctx);
       }
       // Hover card: the name with the sidebar trail's icon vocabulary
       // (pencil = edited, book = read), then one quiet meta line. No path;

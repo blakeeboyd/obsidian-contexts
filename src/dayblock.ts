@@ -24,7 +24,7 @@
 import { MarkdownRenderChild, setIcon } from "obsidian";
 import { fmtClock, fmtDelta, fmtDur, relDay } from "./format";
 import type ContextsPlugin from "./main";
-import { MAP_VIEW_TYPE, drawForest, makeColorOf } from "./map";
+import { MAP_VIEW_TYPE, drawForest } from "./map";
 import { HoverTip } from "./tip";
 import {
   NavGroup,
@@ -243,7 +243,6 @@ export class ContextsBlock extends MarkdownRenderChild {
       svg,
       trees,
       groupBy: grain,
-      colorOf: makeColorOf(relEvents, gapMs),
       sigils: allSigils(relEvents),
       tips: this.tips,
       deviceLabel: (id) => this.plugin.deviceLabel(id),

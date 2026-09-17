@@ -1,6 +1,6 @@
 import { App, EventRef, FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
-import { EventLog, getDeviceId } from "./log";
+import { EventLog, getDeviceId, migrateLogDir } from "./log";
 import { DayBlock } from "./dayblock";
 import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
@@ -105,7 +105,13 @@ export default class ContextsPlugin extends Plugin {
     this.settings.capture = Object.assign({}, DEFAULT_SETTINGS.capture, this.settings.capture);
     this.addSettingTab(new ContextsSettingTab(this.app, this));
 
-    this.log = new EventLog(this.app.vault.adapter, `${this.manifest.dir}/log`, getDeviceId());
+    // The log lives IN the vault (visible folder) so vault sync carries it
+    // between devices: Obsidian Sync moves a plugin's code and data.json but
+    // NOT arbitrary files in the plugin folder, which is why shards written
+    // under the plugin dir never crossed devices. Legacy shards migrate on
+    // load. Requires Sync's "all other types" toggle for .jsonl.
+    await migrateLogDir(this.app.vault.adapter, `${this.manifest.dir}/log`, this.settings.logFolder);
+    this.log = new EventLog(this.app.vault.adapter, this.settings.logFolder, getDeviceId());
 
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerView(BRAID_VIEW_TYPE, (leaf) => new BraidView(leaf, this));
@@ -681,6 +687,19 @@ export default class ContextsPlugin extends Plugin {
   /** Device ids with shards on disk, for the settings naming UI. */
   listDevices(): Promise<string[]> {
     return this.log.listDevices();
+  }
+
+  /** Move the log to another in-vault folder: migrate the files, repoint the writer, reload the views. */
+  async setLogFolder(folder: string): Promise<void> {
+    folder = folder.trim().replace(/\/+$/, "");
+    if (!folder || folder === this.settings.logFolder) return;
+    const old = this.settings.logFolder;
+    await migrateLogDir(this.app.vault.adapter, old, folder);
+    this.settings.logFolder = folder;
+    await this.saveSettings();
+    this.log = new EventLog(this.app.vault.adapter, folder, getDeviceId());
+    this.events = null; // re-read from the new location on next use
+    new Notice(`Contexts: log moved to ${folder}`);
   }
 
   private dayBlocks = new Set<DayBlock>();

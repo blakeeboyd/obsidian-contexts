@@ -12,6 +12,24 @@ import type { LogEvent } from "./recorder";
 
 const DEVICE_KEY = "contexts-device-id";
 
+/**
+ * Move every file from one log directory to another (legacy plugin-dir
+ * location → the in-vault folder, or a settings change). Per-device shards
+ * mean each device only ever moves files it or sync put there; renames of
+ * the same names on two devices resolve to identical content.
+ */
+export async function migrateLogDir(adapter: DataAdapter, from: string, to: string): Promise<void> {
+  if (from === to || !(await adapter.exists(from))) return;
+  if (!(await adapter.exists(to))) await adapter.mkdir(to);
+  const { files } = await adapter.list(from);
+  for (const f of files) {
+    const name = f.split("/").pop()!;
+    const dest = `${to}/${name}`;
+    if (await adapter.exists(dest)) continue; // already there (synced ahead of us)
+    await adapter.rename(f, dest);
+  }
+}
+
 /** Stable per-device id. localStorage is per-device and does not sync, which is exactly what we want. */
 export function getDeviceId(): string {
   try {

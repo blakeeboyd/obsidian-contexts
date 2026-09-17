@@ -66,6 +66,9 @@ export interface ContextsSettings {
   // Display names for device ids ("Mac", "iPhone"); the log stays one
   // logical stream, this is how a stint's hands get a human name.
   deviceNames: Record<string, string>;
+  // In-vault folder holding the log shards, so vault sync carries them
+  // between devices (Obsidian Sync does not sync extra plugin-folder files).
+  logFolder: string;
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -101,6 +104,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
+  logFolder: "Contexts Log",
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {
@@ -165,6 +169,17 @@ export class ContextsSettingTab extends PluginSettingTab {
       .setName("Pause recording")
       .setDesc("Stop logging entirely until turned back on. Paused time simply won't exist in the record.")
       .addToggle((t) => t.setValue(this.plugin.settings.paused).onChange((v) => this.plugin.setPaused(v)));
+
+    new Setting(containerEl)
+      .setName("Log folder")
+      .setDesc(
+        "In-vault folder holding the event log shards, so vault sync carries them between devices. With Obsidian Sync, enable \"Sync all other types\" on every device or the .jsonl shards stay local. Changing this moves the files."
+      )
+      .addSearch((search) => {
+        search.setPlaceholder("Folder path").setValue(this.plugin.settings.logFolder);
+        new FolderSuggest(this.app, search.inputEl, (path) => void this.plugin.setLogFolder(path));
+        search.inputEl.addEventListener("blur", () => void this.plugin.setLogFolder(search.inputEl.value));
+      });
 
     new Setting(containerEl)
       .setName("Excluded folders")

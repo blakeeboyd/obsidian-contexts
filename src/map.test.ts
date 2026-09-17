@@ -96,7 +96,7 @@ describe("buildNavForest", () => {
       { t: 30 * MIN, type: "reassign", path: "Other.md", name: "", from: 0, to: 30 * MIN },
       { t: 31 * MIN, type: "reassign", path: "Stray.md", name: "", from: 0, to: 30 * MIN },
     ];
-    const trees = buildNavForest(events, { ctx: "ctx1" });
+    const trees = buildNavForest(events, { ctx: new Set(["ctx1"]) });
     expect(trees[0].root.path).toBe("A.md");
     // The moved-out visits vanish; B chains to the previous in-context file.
     expect(trees[0].parentOf.get("B.md")).toBe("A.md");
@@ -107,6 +107,28 @@ describe("buildNavForest", () => {
     expect(trees[0].root.away).toBeUndefined();
   });
 
+  it("a soloed SET composes contexts, includes no-context via \"\", and badges leaving the set", () => {
+    const events: LogEvent[] = [
+      span("Free.md", 1 * MIN), // before any declaration: no context
+      { t: 6 * MIN, type: "context", name: "ctx1" },
+      span("A.md", 7 * MIN),
+      { t: 13 * MIN, type: "context", name: "ctx2" },
+      span("Foreign.md", 14 * MIN), // outside the soloed set
+      { t: 20 * MIN, type: "context", name: "ctx1" },
+      span("B.md", 21 * MIN),
+    ];
+    const trees = buildNavForest(events, { ctx: new Set(["ctx1", ""]) });
+    expect([...trees[0].parentOf.keys()]).toEqual(["Free.md", "A.md", "B.md"]);
+    // Away means "left the soloed set and returned": membership, not equality.
+    const all: NavNode[] = [];
+    const walk = (n: NavNode) => {
+      all.push(n);
+      n.children.forEach(walk);
+    };
+    walk(trees[0].root);
+    expect(all.find((n) => n.path === "B.md")?.away).toEqual({ times: 1, dur: 5 * MIN, files: 1 });
+  });
+
   it("removes a file entirely once every span is moved out of the context", () => {
     const events: LogEvent[] = [
       { t: 0, type: "context", name: "ctx1" },
@@ -115,7 +137,7 @@ describe("buildNavForest", () => {
       { t: 29 * MIN, type: "context", name: "ctx2" }, // reassign targets must already exist
       { t: 30 * MIN, type: "reassign", path: "Subwoofer.md", name: "ctx2", from: 0, to: 20 * MIN },
     ];
-    const trees = buildNavForest(events, { ctx: "ctx1" });
+    const trees = buildNavForest(events, { ctx: new Set(["ctx1"]) });
     expect([...trees[0].parentOf.keys()]).toEqual(["A.md"]);
   });
 

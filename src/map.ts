@@ -1,5 +1,6 @@
 import { App, ItemView, Keymap, Menu, Modal, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { isSpan } from "./recorder";
+import type { LogEvent } from "./recorder";
 import type ContextsPlugin from "./main";
 import { PALETTE, UNASSIGNED_COLOR } from "./braid";
 import { fmtClock, fmtDur, relDay } from "./format";
@@ -15,25 +16,28 @@ import {
   applyRenames,
   assignContexts,
   buildNavForest,
+  contextFileSets,
   contextNames,
   contextRuns,
+  currentContext,
   excludeFolders,
   fileContexts,
   groupSessions,
+  guessContext,
   healRenames,
   layoutNavTree,
   localDay,
   pairKey,
+  topFiles,
 } from "./views";
 
 export const MAP_VIEW_TYPE = "contexts-map";
 
-/** Scope: which slice of the record the map draws. */
-type MapScope = "session" | "day" | "context" | "range" | "all";
+/** Scope: which TIME slice the map draws. Context filtering is the rail's solo, which composes with any of these. */
+type MapScope = "session" | "day" | "range" | "all";
 const SCOPES: { key: MapScope; label: string }[] = [
   { key: "session", label: "Session" },
   { key: "day", label: "Today" },
-  { key: "context", label: "Context" },
   { key: "range", label: "Range" },
   { key: "all", label: "All" },
 ];
@@ -94,7 +98,11 @@ const MAX_LABEL_W = 180;
  */
 export class MapView extends ItemView {
   private mapScope: MapScope = "day";
-  private ctxChoice: string | null = null;
+  // The solo rail's view filter: which contexts to SEE ("" = no context).
+  // Ephemeral by design — a lens, not a setting. If the same set gets soloed
+  // daily, that's the endeavors signal; notice it, don't pre-build it.
+  private soloed = new Set<string>();
+  private railOpen = true;
   // The most recent session reads first: today's map starts with now.
   private newestFirst = true;
   // Tree granularity: a tree per inferred session, per day, or per week.
@@ -203,7 +211,6 @@ export class MapView extends ItemView {
     // Days that actually hold activity, for the range picker.
     const activeDays = [...new Set(relEvents.filter(isSpan).map((sp) => localDay(sp.start)))].sort((a, b) => a - b);
     for (const { key, label } of SCOPES) {
-      if (key === "context" && !names.length) continue;
       const b = seg.createEl("button", { text: label, cls: "contexts-braid-seg-btn" });
       if (key === this.mapScope) b.addClass("is-active");
       b.addEventListener("click", () => {
@@ -223,17 +230,14 @@ export class MapView extends ItemView {
         void this.render();
       });
     }
-    if (this.mapScope === "context" && names.length) {
-      const pick = header.createEl("select", { cls: "contexts-map-select" });
-      for (const name of names) pick.createEl("option", { text: name, value: name });
-      pick.value = this.ctxChoice && names.includes(this.ctxChoice) ? this.ctxChoice : names[0];
-      this.ctxChoice = pick.value;
-      pick.addEventListener("change", () => {
-        this.ctxChoice = pick.value;
-        this.manualVB = null;
-        void this.render();
-      });
-    }
+    const railBtn = header.createEl("button", { cls: "contexts-braid-seg-btn" });
+    setIcon(railBtn, "panel-left");
+    railBtn.setAttribute("aria-label", this.railOpen ? "Hide context rail" : "Show context rail");
+    if (this.railOpen) railBtn.addClass("is-active");
+    railBtn.addEventListener("click", () => {
+      this.railOpen = !this.railOpen;
+      void this.render();
+    });
     const zoomWrap = header.createDiv({ cls: "contexts-braid-zoom" });
     const zoomBtn = (icon: string, label: string, onClick: () => void) => {
       const b = zoomWrap.createEl("button", { cls: "contexts-braid-seg-btn" });
@@ -341,24 +345,23 @@ export class MapView extends ItemView {
           return true;
         })
       : relEvents;
-    const scopeArg: { from?: number; to?: number; ctx?: string } = {};
+    const scopeArg: { from?: number; to?: number; ctx?: Set<string> } = {};
     if (this.mapScope === "session") {
       const sessions = groupSessions(mapEvents, gapMs);
       if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
-    else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
     else if (this.mapScope === "range" && this.range) {
       scopeArg.from = this.range.from;
       // End day inclusive: up to the local midnight after it.
       const d = new Date(this.range.to);
       scopeArg.to = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1;
     }
+    // Solo composes with any time scope: the soloed set is what you SEE.
+    // A soloed name renamed or merged away is pruned, not left to blank the map.
+    for (const n of this.soloed) if (n && !names.includes(n)) this.soloed.delete(n);
+    if (this.soloed.size) scopeArg.ctx = new Set(this.soloed);
     const trees = buildNavForest(mapEvents, scopeArg, gapMs, this.groupBy);
     if (this.newestFirst) trees.reverse();
-    if (!trees.length) {
-      contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
-      return;
-    }
 
     // Context colors: same palette, same first-appearance order as the braid's bands.
     const bandOrder: string[] = [];
@@ -374,6 +377,15 @@ export class MapView extends ItemView {
     // Sigil where the color dot sits, color kept as reinforcement (symbol
     // sigils take the context color as fill; emoji carry their own).
     const sigils = allSigils(relEvents);
+
+    // The rail renders before the empty check: with a solo active and no
+    // matching work, the way back to all is the rail itself.
+    const main = contentEl.createDiv({ cls: "contexts-braid-main" });
+    if (this.railOpen) this.renderRail(main, relEvents, mapEvents, scopeArg, colorOf, sigils);
+    if (!trees.length) {
+      main.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });
+      return;
+    }
 
     // Label metrics from real text measurement, so columns stagger like
     // Tangent's. Long names wrap to two lines; anything longer ellipsizes
@@ -472,7 +484,6 @@ export class MapView extends ItemView {
     let maxDur = 1;
     for (const { pos } of placements) for (const n of pos.keys()) maxDur = Math.max(maxDur, n.dur);
 
-    const main = contentEl.createDiv({ cls: "contexts-braid-main" });
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
     this.svgEl = svg;
     // One arrowhead marker for every edge: fill follows the line's own
@@ -736,7 +747,7 @@ export class MapView extends ItemView {
           badge.createSvg("text", { attr: { x: p.x - 12, y: p.y + 3, "text-anchor": "middle" } }).textContent = "⋯";
           this.tips.attach(
             badge,
-            `left the context ${n.away.times === 1 ? "once" : `${n.away.times}×`} before returning here · ${fmtDur(
+            `left ${this.soloed.size > 1 ? "the soloed set" : "the context"} ${n.away.times === 1 ? "once" : `${n.away.times}×`} before returning here · ${fmtDur(
               n.away.dur
             )} away · ${n.away.files} file${n.away.files === 1 ? "" : "s"} elsewhere`
           );
@@ -766,6 +777,103 @@ export class MapView extends ItemView {
       if (found) this.renderDetail(main, relEvents, found.tree, found.node, colorOf);
       else this.selected = null;
     }
+  }
+
+  /**
+   * The solo rail: every context as a mixer row — SOLO is what you see (an
+   * ephemeral view filter), ARM is where new work goes (the declaration,
+   * marked with the compass). Rows sort by recency and fade continuously
+   * with inactivity — a pace gradient, not a dormant gate: a stale context
+   * is quiet and low but never behind a door.
+   */
+  private renderRail(
+    main: HTMLElement,
+    relEvents: LogEvent[],
+    mapEvents: LogEvent[],
+    window: { from?: number; to?: number },
+    colorOf: (ctx: string) => string,
+    sigils: Map<string, string>
+  ): void {
+    const s = this.plugin.settings;
+    const rail = main.createDiv({ cls: "contexts-map-rail" });
+    // Recency is all-time (the fade); engaged time is windowed to the
+    // current view (the number on the row). Both honor the device filter.
+    const ctxOf = assignContexts(mapEvents);
+    const rows = new Map<string, { win: number; lastAt: number }>();
+    for (const name of contextNames(relEvents)) rows.set(name, { win: 0, lastAt: 0 });
+    rows.set("", { win: 0, lastAt: 0 });
+    for (const ev of mapEvents) {
+      if (!isSpan(ev)) continue;
+      const name = ctxOf.get(ev) ?? "";
+      let r = rows.get(name);
+      if (!r) rows.set(name, (r = { win: 0, lastAt: 0 }));
+      r.lastAt = Math.max(r.lastAt, ev.t);
+      if ((window.from === undefined || ev.t >= window.from) && (window.to === undefined || ev.t <= window.to)) r.win += ev.dur;
+    }
+    const current = currentContext(relEvents);
+    const halfLifeMs = s.halfLifeDays * 24 * 3600_000;
+    const guess = guessContext(relEvents, Date.now(), halfLifeMs);
+    const ctxSets = contextFileSets(relEvents);
+    const ordered = [...rows.entries()].sort((a, b) => b[1].lastAt - a[1].lastAt);
+    for (const [name, r] of ordered) {
+      const row = rail.createDiv({ cls: "contexts-map-rail-row" });
+      // The activity fade, continuous with inactivity; never below legible.
+      const weight = r.lastAt ? Math.pow(2, -(Date.now() - r.lastAt) / halfLifeMs) : 0;
+      row.style.opacity = (0.35 + 0.65 * weight).toFixed(2);
+      if (this.soloed.has(name)) row.addClass("is-soloed");
+      row.createSpan({ text: sigils.get(name) ?? "", cls: "contexts-sigil" });
+      row.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(name);
+      row.createSpan({ text: name || "(no context)", cls: "contexts-map-rail-name" });
+      if (name && name === current) {
+        const armed = row.createSpan({ cls: "contexts-map-rail-armed" });
+        setIcon(armed, "compass");
+        armed.setAttribute("aria-label", "Armed: new work goes here");
+      }
+      // The guess-glint: recognition of a return, moved in from the pane.
+      // Click confirms the declaration; ignoring costs nothing.
+      if (guess && name === guess.name && guess.name !== current) {
+        const glint = row.createSpan({ cls: "contexts-map-rail-glint" });
+        setIcon(glint, "sparkles");
+        glint.setAttribute("aria-label", `Working in ${name}? Click to confirm`);
+        glint.addEventListener("click", (evt) => {
+          evt.stopPropagation();
+          this.plugin.declareContext(name, "guess");
+        });
+      }
+      if (r.win > 0) row.createSpan({ text: fmtDur(r.win), cls: "contexts-map-rail-time" });
+      const set = ctxSets.get(name);
+      if (set) {
+        // Hover: the context's face — the files that define it.
+        this.tips.attach(row, (el) => {
+          el.createDiv({ text: name || "(no context)", cls: "contexts-tip-name" });
+          const files = topFiles(set).slice(0, 5).map((p) => p.split("/").pop()?.replace(/\.md$/, "") ?? p);
+          el.createDiv({ text: files.join(", "), cls: "contexts-tip-meta" });
+        });
+      }
+      row.addEventListener("click", (evt) => {
+        // Click grammar: click solos; shift-click adds/removes from the set;
+        // ⌘-click or re-clicking the sole soloed row goes back to all.
+        if (Keymap.isModifier(evt, "Mod")) this.soloed.clear();
+        else if (evt.shiftKey) {
+          if (this.soloed.has(name)) this.soloed.delete(name);
+          else this.soloed.add(name);
+        } else if (this.soloed.size === 1 && this.soloed.has(name)) this.soloed.clear();
+        else this.soloed = new Set([name]);
+        this.manualVB = null;
+        void this.render();
+      });
+      if (name) {
+        row.addEventListener("contextmenu", (evt) => {
+          const menu = new Menu();
+          menu.addItem((i) => i.setTitle("Declare (work here now)").setIcon("compass").onClick(() => this.plugin.declareContext(name)));
+          menu.addItem((i) => i.setTitle("Rename / set sigil…").setIcon("pencil").onClick(() => void this.plugin.openRenameFor(name)));
+          menu.addItem((i) => i.setTitle("Merge into…").setIcon("merge").onClick(() => void this.plugin.openMergeModal(name)));
+          menu.showAtMouseEvent(evt);
+        });
+      }
+    }
+    const newBtn = rail.createEl("button", { text: "+ New context", cls: "contexts-map-rail-new" });
+    newBtn.addEventListener("click", () => void this.plugin.mintAnonContext());
   }
 
   /** The node detail, braid-register: identity, contexts, stats, and the movement around it. */

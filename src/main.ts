@@ -304,7 +304,7 @@ export default class ContextsPlugin extends Plugin {
             new Notice("Contexts: no contexts to rename yet.");
             return;
           }
-          new RenameContextModal(this.app, this, names, contextFileSets(events), allSigils(events), pinnedSigils(events), recentSigils(events)).open();
+          new RenameContextModal(this.app, this, names, contextFileSets(events), allSigils(events)).open();
         })();
       },
     });
@@ -555,6 +555,40 @@ export default class ContextsPlugin extends Plugin {
   /** Pin a context's sigil: a logged event riding the identity pass, so renames carry it. */
   setSigil(name: string, sigil: string): void {
     this.enqueue(() => this.record({ t: Date.now(), type: "sigil", name, sigil }));
+  }
+
+  /** The name-and-sigil modal for one context, shared by the rename command and the rail's right-click. */
+  async openRenameFor(name: string): Promise<void> {
+    const events = await this.getEvents();
+    // Renaming an anonymous context starts from the derived label: one Enter
+    // adopts the suggestion, and adopting pins it.
+    const set = contextFileSets(events).get(name);
+    const suggestion = set && ANON_CONTEXT_RE.test(name) ? derivedLabel(set) : "";
+    // The sigil event must land BEFORE the relabel (both enqueue FIFO): it
+    // addresses the context by its current name, which the rename retires.
+    new NameModal(this.app, `Rename "${name}" to:`, suggestion || name, (to) => this.relabelContext(name, to), {
+      value: allSigils(events).get(name) ?? "",
+      pinned: pinnedSigils(events).get(name) ?? "",
+      recent: recentSigils(events),
+      onPick: (s) => this.setSigil(name, s),
+    }).open();
+  }
+
+  /** Merge one context into another: a relabel onto an existing name, which the identity pass merges. */
+  async openMergeModal(from: string): Promise<void> {
+    const events = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
+    const names = contextNames(events).filter((n) => n !== from);
+    if (!names.length) {
+      new Notice("Contexts: no other context to merge into.");
+      return;
+    }
+    new PickContextModal(this.app, names, `Merge "${from}" into…`, (to) => this.relabelContext(from, to)).open();
+  }
+
+  /** The one-click anonymous mint: declare the next "context N". */
+  async mintAnonContext(): Promise<void> {
+    const names = contextNames(excludeFolders(await this.getEvents(), this.settings.excludedFolders));
+    this.declareContext(`context ${nextContextIndex(names)}`);
   }
 
   async openContextModal(): Promise<void> {
@@ -1181,9 +1215,7 @@ class RenameContextModal extends FuzzySuggestModal<string> {
     private plugin: ContextsPlugin,
     private names: string[],
     private ctxSets: Map<string, ContextSet>,
-    private sigils: Map<string, string>,
-    private pinned: Map<string, string>,
-    private recents: string[]
+    private sigils: Map<string, string>
   ) {
     super(app);
     this.setPlaceholder("Rename which context?");
@@ -1202,19 +1234,27 @@ class RenameContextModal extends FuzzySuggestModal<string> {
   }
 
   onChooseItem(item: string): void {
-    // Renaming an anonymous context starts from the derived label: one Enter
-    // adopts the suggestion, and adopting pins it (the drift stops with the
-    // anonymous name it decorated).
-    const set = this.ctxSets.get(item);
-    const suggestion = set && ANON_CONTEXT_RE.test(item) ? derivedLabel(set) : "";
-    // The sigil event must land BEFORE the relabel (both enqueue FIFO): it
-    // addresses the context by its current name, which the rename retires.
-    new NameModal(this.app, `Rename "${item}" to:`, suggestion || item, (to) => this.plugin.relabelContext(item, to), {
-      value: this.sigils.get(item) ?? "",
-      pinned: this.pinned.get(item) ?? "",
-      recent: this.recents,
-      onPick: (s) => this.plugin.setSigil(item, s),
-    }).open();
+    void this.plugin.openRenameFor(item);
+  }
+}
+
+/** Pick one context by name — the merge target picker and any future "which context?" question. */
+class PickContextModal extends FuzzySuggestModal<string> {
+  constructor(app: App, private names: string[], placeholder: string, private onPick: (name: string) => void) {
+    super(app);
+    this.setPlaceholder(placeholder);
+  }
+
+  getItems(): string[] {
+    return this.names;
+  }
+
+  getItemText(item: string): string {
+    return item;
+  }
+
+  onChooseItem(item: string): void {
+    this.onPick(item);
   }
 }
 

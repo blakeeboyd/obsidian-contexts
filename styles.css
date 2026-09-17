@@ -295,6 +295,72 @@
   user-select: none;
 }
 
+.contexts-map-rail {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--background-modifier-border);
+  padding: 2px 8px 4px 0;
+  margin-right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contexts-map-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.contexts-map-rail-row:hover {
+  background: var(--background-modifier-hover);
+  opacity: 1 !important;
+}
+
+.contexts-map-rail-row.is-soloed {
+  background: var(--background-modifier-hover);
+  box-shadow: inset 2px 0 0 var(--interactive-accent);
+  opacity: 1 !important;
+}
+
+.contexts-map-rail-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contexts-map-rail-armed svg,
+.contexts-map-rail-glint svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.contexts-map-rail-armed {
+  color: var(--interactive-accent);
+}
+
+.contexts-map-rail-glint {
+  color: var(--text-accent);
+}
+
+.contexts-map-rail-time {
+  color: var(--text-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.contexts-map-rail-new {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
 .contexts-derived-label {
   font-style: italic;
   opacity: 0.7;

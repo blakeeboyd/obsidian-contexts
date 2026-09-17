@@ -460,12 +460,19 @@
 }
 
 /* The context chip rides the view header's action row (leftmost action,
-   beside the reading-mode toggle), inheriting clickable-icon hover. */
+   beside the reading-mode toggle), inheriting clickable-icon hover. The
+   width overrides carry !important because Obsidian mobile sizes every
+   .view-action/.clickable-icon as a fixed square, which clipped the chip
+   to the compass plus one character. */
+.view-header .view-actions .contexts-header-ctx,
 .contexts-header-ctx {
   display: flex;
   align-items: center;
   gap: 4px;
-  width: auto;
+  width: auto !important;
+  min-width: 0;
+  max-width: 38vw;
+  flex-shrink: 1;
   padding: 4px 6px;
   font-size: 12px;
   color: var(--text-muted);

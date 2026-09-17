@@ -144,6 +144,8 @@ export class ContextsBlock extends MarkdownRenderChild {
   private openSessions = new Set<number>();
   // The user has panned/zoomed/clicked this block's map: the gesture hint retires.
   private mapTouched = false;
+  // A user-dragged block height (px); null = the drawing's own aspect ratio.
+  private mapHeight: number | null = null;
   private tips = new HoverTip();
 
   constructor(
@@ -240,6 +242,14 @@ export class ContextsBlock extends MarkdownRenderChild {
       return;
     }
     const wrap = el.createDiv({ cls: "contexts-block-map" });
+    // Native CSS resize gives the wrap a drag grip (bottom-right corner);
+    // the svg fills it. Default height comes from the drawing's aspect
+    // ratio; a user-dragged height is remembered per block instance, so
+    // live re-renders don't snap the box back.
+    if (this.mapHeight) wrap.style.height = `${this.mapHeight}px`;
+    wrap.addEventListener("pointerup", () => {
+      if (wrap.offsetHeight) this.mapHeight = wrap.offsetHeight;
+    });
     const svg = wrap.createSvg("svg", { cls: ["contexts-map-svg", "contexts-block-map-svg"] });
     const drawing = drawForest({
       svg,
@@ -265,7 +275,7 @@ export class ContextsBlock extends MarkdownRenderChild {
     let vb = { ...fit };
     const apply = () => svg.setAttribute("viewBox", `${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`);
     apply();
-    svg.style.aspectRatio = `${fit.w} / ${fit.h}`;
+    if (!this.mapHeight) wrap.style.aspectRatio = `${fit.w} / ${fit.h}`;
     const toVB = (x: number, y: number): DOMPoint | null => {
       const m = svg.getScreenCTM();
       return m ? new DOMPoint(x, y).matrixTransform(m.inverse()) : null;
@@ -352,7 +362,7 @@ export class ContextsBlock extends MarkdownRenderChild {
     if (!this.mapTouched) {
       hint = wrap.createDiv({
         cls: "contexts-block-hint",
-        text: "drag to pan · ⌘-scroll to zoom · double-click to fit · click a note to open",
+        text: "drag to pan · ⌘-scroll to zoom · double-click to fit · drag the corner to resize",
       });
     }
     // Bottom-right, away from Live Preview's own edit-block pencil at the

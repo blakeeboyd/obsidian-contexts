@@ -374,21 +374,26 @@
   font-size: 12px;
 }
 
+/* Native vertical resize: the browser draws a drag grip in the wrap's
+   bottom-right corner; the svg fills whatever height the user chooses. */
 .contexts-block-map {
   position: relative;
+  resize: vertical;
+  overflow: hidden;
+  min-height: 120px;
+  max-height: 85vh;
 }
 
 .contexts-block-map-svg {
   width: 100%;
-  height: auto;
-  max-height: 70vh;
+  height: 100%;
   display: block;
 }
 
 .contexts-block-open {
   position: absolute;
   bottom: 4px;
-  right: 4px;
+  right: 20px; /* the native resize grip owns the very corner */
   opacity: 0.5;
   cursor: pointer;
   color: var(--text-muted);
@@ -430,7 +435,7 @@
 .contexts-block-hint {
   position: absolute;
   bottom: 7px;
-  right: 28px;
+  right: 44px;
   font-size: 10px;
   color: var(--text-faint);
   pointer-events: none;

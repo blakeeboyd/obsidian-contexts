@@ -463,6 +463,20 @@ export interface RelabelEvent {
 }
 
 /**
+ * A context's sigil: a one-or-two-character glyph, the primary identity mark
+ * (color demotes to reinforcement — it stops scaling at the palette and fails
+ * grayscale). Rides the same identity pass as relabels, so renaming a context
+ * carries its sigil and sigils travel with the log instead of orphaning in
+ * settings. An empty sigil unpins, returning the context to placeholders.
+ */
+export interface SigilEvent {
+  t: number;
+  type: "sigil";
+  name: string;
+  sigil: string;
+}
+
+/**
  * The user's judgment that a file does NOT belong to a context, whatever the
  * spans say — the eviction undoes automatic membership (a test file visited
  * mid-context, an accidental detour). Applied at read time to ALL of the
@@ -544,6 +558,7 @@ export type LogEvent = DeviceTag &
   | RelateEvent
   | ContextEvent
   | RelabelEvent
+  | SigilEvent
   | PeekEvent
   | EvictEvent
   | NoteEvent

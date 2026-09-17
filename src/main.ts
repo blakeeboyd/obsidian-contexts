@@ -39,7 +39,9 @@ import { ContextsSettingTab, ContextsSettings, DEFAULT_SETTINGS } from "./settin
 import {
   ANON_CONTEXT_RE,
   ContextSet,
+  STARTER_SIGILS,
   allRelationships,
+  allSigils,
   applyErasures,
   applyRenames,
   assignContexts,
@@ -54,6 +56,8 @@ import {
   knownLinks,
   peekEvents,
   derivedLabel,
+  pinnedSigils,
+  recentSigils,
   topFiles,
   healRenames,
   relatedTo,
@@ -300,7 +304,7 @@ export default class ContextsPlugin extends Plugin {
             new Notice("Contexts: no contexts to rename yet.");
             return;
           }
-          new RenameContextModal(this.app, this, names, contextFileSets(events)).open();
+          new RenameContextModal(this.app, this, names, contextFileSets(events), allSigils(events), pinnedSigils(events), recentSigils(events)).open();
         })();
       },
     });
@@ -548,10 +552,15 @@ export default class ContextsPlugin extends Plugin {
     new Notice(`Context renamed: ${from} → ${to}`);
   }
 
+  /** Pin a context's sigil: a logged event riding the identity pass, so renames carry it. */
+  setSigil(name: string, sigil: string): void {
+    this.enqueue(() => this.record({ t: Date.now(), type: "sigil", name, sigil }));
+  }
+
   async openContextModal(): Promise<void> {
     // Excluded files can't belong to contexts, so the faces skip them.
     const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
-    new ContextModal(this.app, this, contextNames(relEvents), currentContext(relEvents), contextFileSets(relEvents)).open();
+    new ContextModal(this.app, this, contextNames(relEvents), currentContext(relEvents), contextFileSets(relEvents), allSigils(relEvents)).open();
   }
 
   /** User feedback on a pair: related=false demotes it in scoring (never deletes); true restores. */
@@ -1096,7 +1105,8 @@ class ContextModal extends FuzzySuggestModal<string> {
     private plugin: ContextsPlugin,
     private names: string[],
     private current: string | null,
-    private ctxSets: Map<string, ContextSet>
+    private ctxSets: Map<string, ContextSet>,
+    private sigils: Map<string, string>
   ) {
     super(app);
     this.setPlaceholder(this.current ? `Context: ${this.current} — switch to…` : "Declare a context…");
@@ -1116,7 +1126,7 @@ class ContextModal extends FuzzySuggestModal<string> {
   }
 
   renderSuggestion(match: { item: string }, el: HTMLElement): void {
-    renderContextRow(el, match.item, this.ctxSets);
+    renderContextRow(el, match.item, this.ctxSets, this.sigils);
   }
 
   onChooseItem(item: string): void {
@@ -1139,10 +1149,13 @@ const FACE_FILES = 5;
 function renderContextRow(
   el: HTMLElement,
   name: string,
-  ctxSets: Map<string, ContextSet>
+  ctxSets: Map<string, ContextSet>,
+  sigils?: Map<string, string>
 ): void {
   const set = ctxSets.get(name);
   const title = el.createDiv();
+  const sigil = sigils?.get(name);
+  if (sigil) title.createSpan({ text: sigil, cls: "contexts-sigil" });
   title.createSpan({ text: name });
   if (set && ANON_CONTEXT_RE.test(name)) {
     const label = derivedLabel(set);
@@ -1167,7 +1180,10 @@ class RenameContextModal extends FuzzySuggestModal<string> {
     app: App,
     private plugin: ContextsPlugin,
     private names: string[],
-    private ctxSets: Map<string, ContextSet>
+    private ctxSets: Map<string, ContextSet>,
+    private sigils: Map<string, string>,
+    private pinned: Map<string, string>,
+    private recents: string[]
   ) {
     super(app);
     this.setPlaceholder("Rename which context?");
@@ -1182,7 +1198,7 @@ class RenameContextModal extends FuzzySuggestModal<string> {
   }
 
   renderSuggestion(match: { item: string }, el: HTMLElement): void {
-    renderContextRow(el, match.item, this.ctxSets);
+    renderContextRow(el, match.item, this.ctxSets, this.sigils);
   }
 
   onChooseItem(item: string): void {
@@ -1191,7 +1207,14 @@ class RenameContextModal extends FuzzySuggestModal<string> {
     // anonymous name it decorated).
     const set = this.ctxSets.get(item);
     const suggestion = set && ANON_CONTEXT_RE.test(item) ? derivedLabel(set) : "";
-    new NameModal(this.app, `Rename "${item}" to:`, suggestion || item, (to) => this.plugin.relabelContext(item, to)).open();
+    // The sigil event must land BEFORE the relabel (both enqueue FIFO): it
+    // addresses the context by its current name, which the rename retires.
+    new NameModal(this.app, `Rename "${item}" to:`, suggestion || item, (to) => this.plugin.relabelContext(item, to), {
+      value: this.sigils.get(item) ?? "",
+      pinned: this.pinned.get(item) ?? "",
+      recent: this.recents,
+      onPick: (s) => this.plugin.setSigil(item, s),
+    }).open();
   }
 }
 
@@ -1220,32 +1243,69 @@ class EvictModal extends FuzzySuggestModal<string> {
   }
 }
 
-/** Step two: type the new name. Enter confirms, Escape cancels. */
+/**
+ * Step two: type the new name. Enter confirms, Escape cancels. With `sigil`
+ * options the modal also carries the Foliate-style sigil picker: a small
+ * glyph field beside the name, a grid of candidates (recent emoji first,
+ * then the starter set) below, and the OS emoji palette free in the field.
+ * Only a TOUCHED sigil records — renaming alone never pins a placeholder.
+ */
 export class NameModal extends Modal {
   constructor(
     app: App,
     private title: string,
     private initial: string,
-    private onSubmit: (value: string) => void
+    private onSubmit: (value: string) => void,
+    private sigil?: { value: string; pinned: string; recent: string[]; onPick: (s: string) => void }
   ) {
     super(app);
   }
 
   onOpen() {
     this.titleEl.setText(this.title);
-    const input = this.contentEl.createEl("input", {
+    const row = this.contentEl.createDiv({ cls: "contexts-name-row" });
+    let sigilInput: HTMLInputElement | undefined;
+    let touched = false;
+    if (this.sigil) {
+      sigilInput = row.createEl("input", { type: "text", value: this.sigil.value, cls: "contexts-sigil-input" });
+      sigilInput.setAttribute("aria-label", "Sigil");
+      sigilInput.addEventListener("input", () => (touched = true));
+    }
+    const input = row.createEl("input", {
       type: "text",
       value: this.initial,
       cls: "contexts-name-input",
     });
+    const submit = () => {
+      this.close();
+      if (this.sigil && sigilInput) {
+        const s = sigilInput.value.trim();
+        // Adopting the placeholder pins it too; unchanged-from-pinned is a no-op.
+        if (touched && s && s !== this.sigil.pinned) this.sigil.onPick(s);
+      }
+      this.onSubmit(input.value);
+    };
+    const onEnter = (evt: KeyboardEvent) => {
+      if (evt.key === "Enter") submit();
+    };
+    input.addEventListener("keydown", onEnter);
+    sigilInput?.addEventListener("keydown", onEnter);
+    if (this.sigil) {
+      const grid = this.contentEl.createDiv({ cls: "contexts-sigil-grid" });
+      for (const s of [...new Set([...this.sigil.recent, ...STARTER_SIGILS])]) {
+        const b = grid.createEl("button", { text: s, cls: "contexts-sigil-choice" });
+        if (s === this.sigil.value) b.addClass("is-current");
+        b.addEventListener("click", () => {
+          sigilInput!.value = s;
+          touched = true;
+          grid.querySelector(".is-current")?.removeClass("is-current");
+          b.addClass("is-current");
+          input.focus();
+        });
+      }
+    }
     input.focus();
     input.select();
-    input.addEventListener("keydown", (evt) => {
-      if (evt.key === "Enter") {
-        this.close();
-        this.onSubmit(input.value);
-      }
-    });
   }
 
   onClose() {

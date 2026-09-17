@@ -245,6 +245,56 @@
   width: 100%;
 }
 
+.contexts-name-row {
+  display: flex;
+  gap: 6px;
+}
+
+.contexts-sigil-input {
+  width: 3.2em;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.contexts-sigil-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.contexts-sigil-choice {
+  min-width: 2em;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.contexts-sigil-choice.is-current {
+  box-shadow: 0 0 0 2px var(--interactive-accent);
+}
+
+.contexts-sigil {
+  display: inline-block;
+  min-width: 1.3em;
+  text-align: center;
+  margin-right: 3px;
+}
+
+.contexts-map-nav-sigil {
+  font-size: 9px;
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.contexts-map-ctx-label {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.85;
+  pointer-events: none;
+  user-select: none;
+}
+
 .contexts-derived-label {
   font-style: italic;
   opacity: 0.7;

@@ -10,6 +10,7 @@ import {
   NavGroup,
   NavNode,
   NavTree,
+  allSigils,
   applyErasures,
   applyRenames,
   assignContexts,
@@ -370,6 +371,9 @@ export class MapView extends ItemView {
       const i = colored.indexOf(ctx);
       return PALETTE[(i === -1 ? colored.length : i) % PALETTE.length];
     };
+    // Sigil where the color dot sits, color kept as reinforcement (symbol
+    // sigils take the context color as fill; emoji carry their own).
+    const sigils = allSigils(relEvents);
 
     // Label metrics from real text measurement, so columns stagger like
     // Tangent's. Long names wrap to two lines; anything longer ellipsizes
@@ -633,6 +637,18 @@ export class MapView extends ItemView {
         if (twoWay(link.from, link.to)) el.addClass("is-two-way");
         touch(link.from, link.to, el);
       }
+      // Context name once per same-context stretch (chronological order),
+      // small above the first node of each run — sigil every node, name once
+      // per stretch, color as reinforcement: three channels at three costs.
+      const runStart = new Set<NavNode>();
+      {
+        const ordered = [...pos.keys()].sort((a, b) => a.firstAt - b.firstAt);
+        let prev: string | null = null;
+        for (const n of ordered) {
+          if (n.ctx && n.ctx !== prev) runStart.add(n);
+          prev = n.ctx;
+        }
+      }
       for (const [n, p] of pos) {
         const g = svg.createSvg("g", { cls: "contexts-map-nav" });
         if (n.edits) g.addClass("is-edited");
@@ -657,8 +673,18 @@ export class MapView extends ItemView {
             const pct = Math.round(5 + 30 * heat);
             rect.style.fill = `color-mix(in srgb, ${colorOf(n.ctx)} ${pct}%, var(--background-primary))`;
           }
-          g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
-            colorOf(n.ctx);
+          const sig = sigils.get(n.ctx);
+          if (sig) {
+            const t = g.createSvg("text", {
+              attr: { x: p.x + 12, y: p.y + 3, "text-anchor": "middle" },
+              cls: "contexts-map-nav-sigil",
+            });
+            t.textContent = sig;
+            t.style.fill = colorOf(n.ctx);
+          } else {
+            g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
+              colorOf(n.ctx);
+          }
           const lines = linesOf(n.path);
           const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
           if (lines.length === 1) {
@@ -673,6 +699,14 @@ export class MapView extends ItemView {
             badge.createSvg("text", { attr: { x: p.x + 2, y: p.y - h / 2 + 4, "text-anchor": "middle" } }).textContent = "+";
           }
         }
+        if (runStart.has(n)) {
+          const sub = svg.createSvg("text", {
+            attr: { x: p.x, y: p.y - (isCompact(n, tree) ? 12 : heightOf(n.path) / 2 + 5) },
+            cls: "contexts-map-ctx-label",
+          });
+          sub.textContent = n.ctx;
+          sub.style.fill = colorOf(n.ctx);
+        }
         // Hover card: the name with the sidebar trail's icon vocabulary
         // (pencil = edited, book = read), then one quiet meta line. No path;
         // the detail panel carries it.
@@ -683,7 +717,7 @@ export class MapView extends ItemView {
           const meta: string[] = [fmtClock(n.firstAt), `${fmtDur(n.dur)} engaged`, `${n.visits} visit${n.visits === 1 ? "" : "s"}`];
           if (n.edits) meta.push(`${n.edits} edit${n.edits === 1 ? "" : "s"}`);
           if (n.created) meta.push("created here");
-          meta.push(n.ctx || "no context");
+          meta.push(n.ctx ? `${sigils.get(n.ctx) ?? ""} ${n.ctx}`.trim() : "no context");
           const local = this.plugin.localDeviceId();
           const devs = [...new Set(n.devices?.filter((d) => d !== local) ?? [])];
           if (devs.length) meta.push(`on ${devs.map((d) => this.plugin.deviceLabel(d)).join(", ")}`);
@@ -758,9 +792,12 @@ export class MapView extends ItemView {
     // state the user may want to correct, not an absence to hide.
     const threads = fileContexts(relEvents, path);
     const ctxRows = threads.length ? threads : [{ name: "", dur: 0 }];
+    const sigils = allSigils(relEvents);
     for (const t of ctxRows) {
       const ctxRow = head.createDiv({ cls: ["contexts-braid-detail-ctx", "contexts-map-ctx-row"] });
       ctxRow.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(t.name);
+      const sig = sigils.get(t.name);
+      if (sig) ctxRow.createSpan({ text: sig, cls: "contexts-sigil" });
       ctxRow.createSpan({ text: t.name ? `${t.name} · ${fmtDur(t.dur)}` : "(no context)" });
       this.tips.attach(ctxRow, "Move or correct this file's visits");
       ctxRow.addEventListener("click", (evt) => this.plugin.openSpanMenu(evt, t.name, path, node.firstAt, node.lastAt));

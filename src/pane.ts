@@ -12,6 +12,7 @@ import {
   Session,
   UNRELATED_WEIGHT,
   allRelationships,
+  allSigils,
   applyErasures,
   applyRenames,
   coalesceTrail,
@@ -191,6 +192,10 @@ export class ContextsPane extends ItemView {
     // context BY BEING excluded, so the line says so instead of implying the
     // current declaration covers it.
     const ctx = currentContext(relEvents);
+    // Sigil before name on the highest-traffic surface: the glyph is the
+    // primary identity mark, the name confirms it.
+    const sigils = allSigils(relEvents);
+    const sig = (name: string) => (sigils.get(name) ? `${sigils.get(name)} ` : "");
     // An evicted file under the declared context reads as a contradiction
     // without the parenthetical: the declaration stands, the file is out.
     const evicted = path ? evictedFrom(relEvents, path) : new Set<string>();
@@ -200,7 +205,7 @@ export class ContextsPane extends ItemView {
       text: excludedBy
         ? "No context: excluded file"
         : ctx
-        ? `Context: ${ctx}${evicted.has(ctx) ? " (this file removed)" : ""}`
+        ? `Context: ${sig(ctx)}${ctx}${evicted.has(ctx) ? " (this file removed)" : ""}`
         : "No context declared",
     });
     ctxLine.setAttribute("title", "Click to declare or switch context");
@@ -212,7 +217,7 @@ export class ContextsPane extends ItemView {
     if (guess && !excludedBy) {
       const guessLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
       setIcon(guessLine.createSpan({ cls: "contexts-chip-icon" }), "sparkles");
-      guessLine.createSpan({ text: `Working in ${guess.name}?` });
+      guessLine.createSpan({ text: `Working in ${sig(guess.name)}${guess.name}?` });
       guessLine.setAttribute("title", "Click to confirm the guessed context");
       guessLine.addEventListener("click", () => this.plugin.declareContext(guess.name, "guess"));
     }
@@ -240,7 +245,7 @@ export class ContextsPane extends ItemView {
       const threads = fileContexts(relEvents, path);
       if (threads.length) {
         contentEl.createDiv({
-          text: `threads: ${threads.map((th) => `${th.name} (${fmtDur(th.dur)})`).join(" · ")}`,
+          text: `threads: ${threads.map((th) => `${sig(th.name)}${th.name} (${fmtDur(th.dur)})`).join(" · ")}`,
           cls: "contexts-row-meta",
         });
       }
@@ -290,7 +295,7 @@ export class ContextsPane extends ItemView {
     }
     for (const ev of trail) {
       // Relatedness feedback and context declarations are not any single file's trail.
-      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate" || ev.type === "context" || ev.type === "relabel")) continue;
+      if (!isStint(ev) && (ev.type === "unrelate" || ev.type === "relate" || ev.type === "context" || ev.type === "relabel" || ev.type === "sigil")) continue;
       const row = contentEl.createDiv({ cls: "contexts-trail-row" });
       if (isStint(ev)) {
         const stints = ev.count > 1 ? ` · ${ev.count} stints` : "";

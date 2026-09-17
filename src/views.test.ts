@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
 import {
   MIN_RELATED_SCORE,
+  STARTER_SIGILS,
   Stint,
   allRelationships,
+  allSigils,
   applyRenames,
   assignContexts,
   coalesceTrail,
@@ -20,6 +22,8 @@ import {
   healRenames,
   knownLinks,
   peekEvents,
+  pinnedSigils,
+  recentSigils,
   topFiles,
   isStint,
   mergeDeltas,
@@ -506,6 +510,63 @@ describe("relabeledDecls", () => {
     ];
     expect(currentContext(events)).toBe("alpha");
     expect(contextNames(events)).toEqual(["alpha"]);
+  });
+});
+
+describe("sigils", () => {
+  it("a sigil rides a rename: pinned under the old name, keyed by the final label", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "context 1" },
+      { t: MIN, type: "sigil", name: "context 1", sigil: "🌊" },
+      { t: 10 * MIN, type: "relabel", from: "context 1", to: "grant" },
+    ];
+    const pinned = pinnedSigils(events);
+    expect(pinned.get("grant")).toBe("🌊");
+    expect(pinned.has("context 1")).toBe(false);
+  });
+
+  it("ignores a sigil for a name never declared; empty sigil unpins", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      { t: MIN, type: "sigil", name: "ghost", sigil: "★" },
+      { t: 2 * MIN, type: "sigil", name: "alpha", sigil: "★" },
+      { t: 3 * MIN, type: "sigil", name: "alpha", sigil: "" },
+    ];
+    expect(pinnedSigils(events).size).toBe(0);
+  });
+
+  it("merged contexts keep the later-set sigil", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "grant" },
+      { t: MIN, type: "sigil", name: "grant", sigil: "◆" },
+      { t: 2 * MIN, type: "context", name: "context 2" },
+      { t: 3 * MIN, type: "sigil", name: "context 2", sigil: "🌊" },
+      { t: 10 * MIN, type: "relabel", from: "context 2", to: "grant" },
+    ];
+    expect(pinnedSigils(events).get("grant")).toBe("🌊");
+  });
+
+  it("allSigils hands out placeholders in first-declaration order, skipping pinned glyphs", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "alpha" },
+      { t: MIN, type: "context", name: "beta" },
+      { t: 2 * MIN, type: "sigil", name: "beta", sigil: STARTER_SIGILS[0] },
+    ];
+    const all = allSigils(events);
+    expect(all.get("beta")).toBe(STARTER_SIGILS[0]); // pinned wins
+    expect(all.get("alpha")).toBe(STARTER_SIGILS[1]); // placeholder skips the claimed glyph
+  });
+
+  it("recentSigils lists hand-picked non-starter glyphs, newest first, deduped", () => {
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "a" },
+      { t: 1, type: "context", name: "b" },
+      { t: 2, type: "sigil", name: "a", sigil: "🌊" },
+      { t: 3, type: "sigil", name: "b", sigil: STARTER_SIGILS[0] },
+      { t: 4, type: "sigil", name: "b", sigil: "🔥" },
+      { t: 5, type: "sigil", name: "a", sigil: "🔥" },
+    ];
+    expect(recentSigils(events)).toEqual(["🔥", "🌊"]);
   });
 });
 

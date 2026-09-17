@@ -441,6 +441,11 @@
   text-overflow: ellipsis;
 }
 
+.contexts-header-ctx.is-excluded {
+  opacity: 0.6;
+  font-style: italic;
+}
+
 .contexts-header-ctx .contexts-chip-icon svg {
   width: 13px;
   height: 13px;

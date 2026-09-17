@@ -835,12 +835,24 @@ export default class ContextsPlugin extends Plugin {
         const actions = leaf.view.containerEl.querySelector(".view-header .view-actions");
         if (!actions) continue;
         const bar = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-ctx"] });
-        setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "compass");
-        bar.createSpan({
-          text: ctx ? `${sigil ? `${sigil} ` : ""}${ctx}` : "No context",
-          cls: "contexts-header-ctx-name",
-        });
-        bar.setAttribute("aria-label", "Declare or switch context");
+        // An excluded file has no context BY BEING excluded (the pane's
+        // compass-line rule): this leaf's chip says so instead of implying
+        // the current declaration covers it.
+        const path = (leaf.view as MarkdownView).file?.path;
+        const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
+        if (excludedBy) {
+          bar.addClass("is-excluded");
+          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
+          bar.createSpan({ text: "Excluded", cls: "contexts-header-ctx-name" });
+          bar.setAttribute("aria-label", `In the excluded folder "${excludedBy}": the trail is recorded, but this file joins no context`);
+        } else {
+          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "compass");
+          bar.createSpan({
+            text: ctx ? `${sigil ? `${sigil} ` : ""}${ctx}` : "No context",
+            cls: "contexts-header-ctx-name",
+          });
+          bar.setAttribute("aria-label", "Declare or switch context");
+        }
         bar.addEventListener("click", () => void this.openContextModal());
         actions.insertAdjacentElement("afterbegin", bar);
       }

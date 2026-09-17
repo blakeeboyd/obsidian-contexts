@@ -142,6 +142,8 @@ export function resolveOver(
 export class ContextsBlock extends MarkdownRenderChild {
   // Expanded session groups, keyed by session start; survives re-renders of this block.
   private openSessions = new Set<number>();
+  // The user has panned/zoomed/clicked this block's map: the gesture hint retires.
+  private mapTouched = false;
   private tips = new HoverTip();
 
   constructor(
@@ -268,23 +270,38 @@ export class ContextsBlock extends MarkdownRenderChild {
       const m = svg.getScreenCTM();
       return m ? new DOMPoint(x, y).matrixTransform(m.inverse()) : null;
     };
+    // The hint teaches the gestures once, in the quiet corner, and retires
+    // at the first sign the user already knows (any real interaction).
+    // Per-block-instance memory: it stays gone across live re-renders.
+    let hint: HTMLElement | null = null;
+    const touched = () => {
+      if (this.mapTouched) return;
+      this.mapTouched = true;
+      hint?.addClass("is-hidden");
+    };
+    const zoomAt = (factor: number, cx: number | null, cy: number | null) => {
+      // Same clamp as the File Map: 16x in, 2x out from fit.
+      const w = Math.min(Math.max(vb.w / factor, fit.w / 16), fit.w * 2);
+      if (w === vb.w) return;
+      const rect = svg.getBoundingClientRect();
+      const p = toVB(cx ?? rect.left + rect.width / 2, cy ?? rect.top + rect.height / 2);
+      if (!p) return;
+      const k = w / vb.w;
+      vb = { x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w, h: vb.h * k };
+      apply();
+    };
     svg.addEventListener(
       "wheel",
       (evt: WheelEvent) => {
-        if (!evt.ctrlKey && !evt.metaKey) return;
+        if (!evt.ctrlKey && !evt.metaKey) return; // plain scroll belongs to the note
         evt.preventDefault();
-        // Same clamp as the File Map: 16x in, 2x out from fit.
-        const w = Math.min(Math.max(vb.w / Math.exp(-evt.deltaY * 0.004), fit.w / 16), fit.w * 2);
-        if (w === vb.w) return;
-        const p = toVB(evt.clientX, evt.clientY);
-        if (!p) return;
-        const k = w / vb.w;
-        vb = { x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w, h: vb.h * k };
-        apply();
+        touched();
+        zoomAt(Math.exp(-evt.deltaY * 0.004), evt.clientX, evt.clientY);
       },
       { passive: false }
     );
     svg.addEventListener("dblclick", () => {
+      touched();
       vb = { ...fit };
       apply();
     });
@@ -294,6 +311,7 @@ export class ContextsBlock extends MarkdownRenderChild {
       if (evt.button !== 0 || evt.target !== svg) return;
       const grab = toVB(evt.clientX, evt.clientY);
       if (!grab) return;
+      touched();
       svg.setPointerCapture(evt.pointerId);
       const move = (mv: PointerEvent) => {
         const p = toVB(mv.clientX, mv.clientY);
@@ -310,6 +328,33 @@ export class ContextsBlock extends MarkdownRenderChild {
       svg.addEventListener("pointerup", up);
       svg.addEventListener("pointercancel", up);
     });
+    // Zoom cluster bottom-left, mirroring the File Map header's buttons.
+    // stopPropagation everywhere: a click must not also drop the cursor
+    // into the block's source (Live Preview).
+    const zoomWrap = wrap.createDiv({ cls: "contexts-block-zoom" });
+    const zoomBtn = (icon: string, label: string, onClick: () => void) => {
+      const b = zoomWrap.createEl("button", { cls: "clickable-icon" });
+      setIcon(b, icon);
+      b.setAttribute("aria-label", label);
+      b.addEventListener("mousedown", (evt) => evt.stopPropagation());
+      b.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        touched();
+        onClick();
+      });
+    };
+    zoomBtn("zoom-out", "Zoom out", () => zoomAt(1 / 1.5, null, null));
+    zoomBtn("zoom-in", "Zoom in", () => zoomAt(1.5, null, null));
+    zoomBtn("maximize", "Fit", () => {
+      vb = { ...fit };
+      apply();
+    });
+    if (!this.mapTouched) {
+      hint = wrap.createDiv({
+        cls: "contexts-block-hint",
+        text: "drag to pan · ⌘-scroll to zoom · double-click to fit · click a note to open",
+      });
+    }
     // Bottom-right, away from Live Preview's own edit-block pencil at the
     // top-right; stopPropagation keeps the click from also dropping the
     // cursor into the block's source.

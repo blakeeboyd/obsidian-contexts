@@ -404,6 +404,44 @@
   display: block;
 }
 
+.contexts-block-zoom {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  display: flex;
+  gap: 2px;
+  opacity: 0.6;
+}
+
+.contexts-block-zoom:hover {
+  opacity: 1;
+}
+
+.contexts-block-zoom button {
+  padding: 2px 4px;
+}
+
+.contexts-block-zoom svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.contexts-block-hint {
+  position: absolute;
+  bottom: 7px;
+  right: 28px;
+  font-size: 10px;
+  color: var(--text-faint);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.5s;
+}
+
+.contexts-block-hint.is-hidden {
+  opacity: 0;
+}
+
 .contexts-map-scope-chip {
   display: inline-flex;
   align-items: center;

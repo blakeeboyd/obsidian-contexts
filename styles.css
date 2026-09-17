@@ -416,23 +416,32 @@
   display: block;
 }
 
-.contexts-editor-bar {
+/* The context chip rides the view header's action row (leftmost action,
+   beside the reading-mode toggle), inheriting clickable-icon hover. */
+.contexts-header-ctx {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 12px;
+  gap: 4px;
+  width: auto;
+  padding: 4px 6px;
   font-size: 12px;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--background-modifier-border);
   cursor: pointer;
   user-select: none;
 }
 
-.contexts-editor-bar:hover {
+.contexts-header-ctx:hover {
   color: var(--text-normal);
 }
 
-.contexts-editor-bar .contexts-chip-icon svg {
+.contexts-header-ctx-name {
+  max-width: 28vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contexts-header-ctx .contexts-chip-icon svg {
   width: 13px;
   height: 13px;
   display: block;

@@ -69,9 +69,9 @@ export interface ContextsSettings {
   // In-vault folder holding the log shards, so vault sync carries them
   // between devices (Obsidian Sync does not sync extra plugin-folder files).
   logFolder: string;
-  // The context bar above the editor (below the tab header): the declared
-  // context, one tap to switch. The phone has no room for the sidebar pane,
-  // so "mobile" is the default.
+  // The context chip in each note's header row (beside the reading-mode
+  // toggle): the declared context, one tap to switch. The phone has no room
+  // for the sidebar pane, so "mobile" is the default.
   contextBar: "off" | "mobile" | "always";
 }
 
@@ -257,8 +257,8 @@ export class ContextsSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Display").setHeading();
 
     new Setting(containerEl)
-      .setName("Context bar above the editor")
-      .setDesc("A slim bar under the tab header showing the declared context; tap it to switch. Made for the phone, where the sidebar pane is out of reach.")
+      .setName("Context chip in the note header")
+      .setDesc("The declared context in each note's header row, beside the reading-mode toggle; tap it to switch. Made for the phone, where the sidebar pane is out of reach.")
       .addDropdown((d) =>
         d
           .addOption("off", "Off")

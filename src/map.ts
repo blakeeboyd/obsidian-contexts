@@ -363,17 +363,7 @@ export class MapView extends ItemView {
     const trees = buildNavForest(mapEvents, scopeArg, gapMs, this.groupBy);
     if (this.newestFirst) trees.reverse();
 
-    // Context colors: same palette, same first-appearance order as the braid's bands.
-    const bandOrder: string[] = [];
-    for (const r of contextRuns(groupSessions(relEvents, gapMs), assignContexts(relEvents))) {
-      if (!bandOrder.includes(r.ctx)) bandOrder.push(r.ctx);
-    }
-    const colored = bandOrder.filter((c) => c !== "");
-    const colorOf = (ctx: string) => {
-      if (ctx === "") return UNASSIGNED_COLOR;
-      const i = colored.indexOf(ctx);
-      return PALETTE[(i === -1 ? colored.length : i) % PALETTE.length];
-    };
+    const colorOf = makeColorOf(relEvents, gapMs);
     // Sigil where the color dot sits, color kept as reinforcement (symbol
     // sigils take the context color as fill; emoji carry their own).
     const sigils = allSigils(relEvents);
@@ -387,122 +377,8 @@ export class MapView extends ItemView {
       return;
     }
 
-    // Label metrics from real text measurement, so columns stagger like
-    // Tangent's. Long names wrap to two lines; anything longer ellipsizes
-    // (the hover card always carries the full path).
-    const canvas = document.createElement("canvas");
-    const mctx = canvas.getContext("2d")!;
-    mctx.font = `500 12px ${getComputedStyle(document.body).fontFamily}`;
-    const baseOf = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
-    const fit = (str: string): string => {
-      if (mctx.measureText(str).width <= MAX_LABEL_W) return str;
-      while (str && mctx.measureText(str + "…").width > MAX_LABEL_W) str = str.slice(0, -1);
-      return str + "…";
-    };
-    const lineCache = new Map<string, string[]>();
-    const linesOf = (path: string): string[] => {
-      let lines = lineCache.get(path);
-      if (lines) return lines;
-      const base = baseOf(path);
-      if (mctx.measureText(base).width <= MAX_LABEL_W) lines = [base];
-      else {
-        const words = base.split(" ");
-        let l1 = "";
-        let i = 0;
-        while (i < words.length) {
-          const next = l1 ? `${l1} ${words[i]}` : words[i];
-          if (l1 && mctx.measureText(next).width > MAX_LABEL_W) break;
-          l1 = next;
-          i++;
-        }
-        const l2 = words.slice(i).join(" ");
-        lines = l2 ? [fit(l1), fit(l2)] : [fit(l1)];
-      }
-      lineCache.set(path, lines);
-      return lines;
-    };
-    const widthOf = (path: string) =>
-      Math.max(...linesOf(path).map((l) => mctx.measureText(l).width)) + 32;
-    const heightOf = (path: string) => (linesOf(path).length > 1 ? 36 : NODE_H);
-
-    // Stack the session trees; remember where every path last appeared for
-    // trails and the detail panel (the latest session is the one that counts).
-    const COMPACT_W = 16;
-    // Brief pass-throughs compact even mid-tree: a dot keeps the chain
-    // visible while dropping the label. ponytail: fixed threshold; a
-    // settings knob if 30s turns out to be the wrong line.
-    const BRIEF_MS = 30_000;
-    // Never compacted: a tree's root and its chronologically last file —
-    // where the sitting began and where it ended anchor the reading.
-    const anchors = new Map<NavTree, Set<string>>();
-    const isCompact = (n: NavNode, tree: NavTree) =>
-      this.compactReads &&
-      !n.edits &&
-      !n.created &&
-      !anchors.get(tree)?.has(n.path) &&
-      n.path !== this.selected &&
-      n.path !== this.plugin.lastActiveMdPath &&
-      (n.children.length === 0 || n.dur < BRIEF_MS);
-    const placements: { tree: NavTree; pos: Map<NavNode, { x: number; y: number; w: number }> }[] = [];
-    const latestNode = new Map<string, { tree: NavTree; node: NavNode }>();
-    let yCursor = 0;
-    for (const tree of trees) {
-      const nodeOf = new Map<string, NavNode>();
-      let last: NavNode = tree.root;
-      const walk = (n: NavNode): void => {
-        nodeOf.set(n.path, n);
-        if (n.lastAt > last.lastAt) last = n;
-        n.children.forEach(walk);
-      };
-      walk(tree.root);
-      anchors.set(tree, new Set([tree.root.path, last.path]));
-      const w = (path: string) => {
-        const n = nodeOf.get(path);
-        return n && isCompact(n, tree) ? COMPACT_W : widthOf(path);
-      };
-      const { pos, height } = layoutNavTree(tree.root, w, LEFT_X, yCursor);
-      placements.push({ tree, pos });
-      for (const n of pos.keys()) latestNode.set(n.path, { tree, node: n });
-      yCursor += height + TREE_GAP;
-    }
-
-    // The trail: root → the file the user is in right now, in its latest tree.
-    const current = this.plugin.lastActiveMdPath;
-    const trail = new Set<string>();
-    let trailTree: NavTree | null = null;
-    if (current && latestNode.has(current)) {
-      trailTree = latestNode.get(current)!.tree;
-      let p: string | null | undefined = current;
-      while (p) {
-        trail.add(p);
-        p = trailTree.parentOf.get(p);
-      }
-    }
-
-    // Engagement scale: global across the forest, so a heavy day doesn't
-    // make a light day's files look important by local comparison.
-    let maxDur = 1;
-    for (const { pos } of placements) for (const n of pos.keys()) maxDur = Math.max(maxDur, n.dur);
-
     const svg = main.createSvg("svg", { cls: "contexts-map-svg" });
     this.svgEl = svg;
-    // One arrowhead marker for every edge: fill follows the line's own
-    // stroke (context-stroke), and orient=auto flips it on backward curves.
-    const marker = svg.createSvg("defs").createSvg("marker", {
-      attr: {
-        id: "contexts-map-arrow",
-        viewBox: "0 0 8 8",
-        refX: 7,
-        refY: 4,
-        // Fixed user-space size: markers otherwise scale with stroke width,
-        // so thick (linked, trail) lines grew oversized heads.
-        markerUnits: "userSpaceOnUse",
-        markerWidth: 8,
-        markerHeight: 8,
-        orient: "auto-start-reverse",
-      },
-    });
-    marker.createSvg("path", { attr: { d: "M 0 0 L 8 4 L 0 8 z", fill: "context-stroke" } });
     let panned = false;
     svg.addEventListener("click", (evt) => {
       if (evt.target === svg && this.selected && !panned) {
@@ -557,223 +433,28 @@ export class MapView extends ItemView {
       svg.addEventListener("pointercancel", up);
     });
 
-    // A soft S-curve with horizontal tangents: the Tangent connector.
-    const curve = (x1: number, y1: number, x2: number, y2: number) => {
-      const mx = (x1 + x2) / 2;
-      return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
-    };
-
-    for (const { tree, pos } of placements) {
-      const at = new Map<string, { x: number; y: number; w: number }>();
-      for (const [n, p] of pos) at.set(n.path, p);
-      const onTrail = (path: string) => tree === trailTree && trail.has(path);
-
-      // Tree label, left of the root: when this run of work began.
-      const rootPos = pos.get(tree.root)!;
-      const label = svg.createSvg("text", {
-        attr: { x: LEFT_X - 14, y: rootPos.y - 2, "text-anchor": "end" },
-        cls: "contexts-map-session",
-      });
-      const d = new Date(tree.start);
-      const line1 =
-        this.groupBy === "week"
-          ? `Week of ${new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}`
-          : this.groupBy === "month"
-          ? d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
-          : relDay(tree.start);
-      label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = line1;
-      const line2 = this.groupBy === "week" || this.groupBy === "month" ? relDay(tree.start) : fmtClock(tree.start);
-      label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
-
-      // Hover wiring: every edge registers with both endpoints, so mousing
-      // over a node can light its lines and, slightly, its neighbors.
-      const groupOf = new Map<string, SVGGElement>();
-      const touching = new Map<string, { el: SVGElement; other: string }[]>();
-      const touch = (a: string, b: string, el: SVGElement) => {
-        for (const [me, other] of [[a, b], [b, a]] as const) {
-          let list = touching.get(me);
-          if (!list) touching.set(me, (list = []));
-          list.push({ el, other });
-        }
-      };
-
-      // One line per pair of files, whatever the ties: the tree edge wins,
-      // upgraded to the "linked" style when a link was also written; among
-      // secondary ties alone, the strongest kind draws. Every tie still
-      // shows in the detail panel — this is drawing economy, not data loss.
-      const RANK = { linked: 3, revisit: 2, peek: 1 } as const;
-      const bestLink = new Map<string, (typeof tree.links)[number]>();
-      for (const link of tree.links) {
-        const key = pairKey(link.from, link.to);
-        const cur = bestLink.get(key);
-        if (!cur || RANK[link.kind] > RANK[cur.kind]) bestLink.set(key, link);
-      }
-      const parentPairs = new Set<string>();
-      // A pair tied in both directions gets a head on each end of its one line.
-      const dirs = new Set<string>();
-      for (const [child, parent] of tree.parentOf) if (parent) dirs.add(`${parent} ${child}`);
-      for (const l of tree.links) dirs.add(`${l.from} ${l.to}`);
-      const twoWay = (a: string, b: string) => dirs.has(`${a} ${b}`) && dirs.has(`${b} ${a}`);
-      // Tree edges first (under the nodes), then secondary curves, then nodes.
-      const drawEdges = (n: NavNode) => {
-        const pp = pos.get(n)!;
-        for (const c of n.children) {
-          const cp = pos.get(c)!;
-          const key = pairKey(n.path, c.path);
-          parentPairs.add(key);
-          const path = svg.createSvg("path", {
-            attr: { d: curve(pp.x + pp.w, pp.y, cp.x, cp.y) },
-            cls: "contexts-map-edge",
-          });
-          // A followed link reads at full strength; mere sequence is fainter;
-          // a pair that was also LINKED in text carries the strongest style.
-          if (bestLink.get(key)?.kind === "linked") path.addClass("is-linked");
-          else if (c.via === "seq") path.addClass("is-seq");
-          if (twoWay(n.path, c.path)) path.addClass("is-two-way");
-          if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
-          touch(n.path, c.path, path);
-          drawEdges(c);
-        }
-      };
-      drawEdges(tree.root);
-      for (const link of bestLink.values()) {
-        if (parentPairs.has(pairKey(link.from, link.to))) continue; // the tree edge already carries this pair
-        const fp = at.get(link.from);
-        const tp = at.get(link.to);
-        if (!fp || !tp) continue;
-        const el = svg.createSvg("path", {
-          attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
-          cls: ["contexts-map-edge", `is-${link.kind}`],
-        });
-        if (twoWay(link.from, link.to)) el.addClass("is-two-way");
-        touch(link.from, link.to, el);
-      }
-      // Context name once per same-context stretch (chronological order),
-      // small above the first node of each run — sigil every node, name once
-      // per stretch, color as reinforcement: three channels at three costs.
-      const runStart = new Set<NavNode>();
-      {
-        const ordered = [...pos.keys()].sort((a, b) => a.firstAt - b.firstAt);
-        let prev: string | null = null;
-        for (const n of ordered) {
-          if (n.ctx && n.ctx !== prev) runStart.add(n);
-          prev = n.ctx;
-        }
-      }
-      for (const [n, p] of pos) {
-        const g = svg.createSvg("g", { cls: "contexts-map-nav" });
-        if (n.edits) g.addClass("is-edited");
-        if (onTrail(n.path)) g.addClass("is-trail");
-        if (n.path === current && tree === trailTree) g.addClass("is-current");
-        if (n.path === this.selected) g.addClass("is-selected");
-        const heat = Math.sqrt(n.dur / maxDur);
-        if (isCompact(n, tree)) {
-          // A drive-by read: structure without a label. Hover says the rest.
-          g.addClass("is-mini");
-          const r = this.showEngagement ? 4 + 3 * heat : 5;
-          g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r }, cls: "contexts-map-mini" }).style.fill =
-            colorOf(n.ctx);
-        } else {
-          const h = heightOf(n.path);
-          const rect = g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
-          // The engagement wash: context color, deeper with engaged time —
-          // blended OPAQUE into the background (color-mix, not opacity), so
-          // connectors never show through behind the text. The current file
-          // keeps its accent wash instead.
-          if (this.showEngagement && !(n.path === current && tree === trailTree)) {
-            const pct = Math.round(5 + 30 * heat);
-            rect.style.fill = `color-mix(in srgb, ${colorOf(n.ctx)} ${pct}%, var(--background-primary))`;
-          }
-          const sig = sigils.get(n.ctx);
-          if (sig) {
-            const t = g.createSvg("text", {
-              attr: { x: p.x + 12, y: p.y + 3, "text-anchor": "middle" },
-              cls: "contexts-map-nav-sigil",
-            });
-            t.textContent = sig;
-            t.style.fill = colorOf(n.ctx);
-          } else {
-            g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
-              colorOf(n.ctx);
-          }
-          const lines = linesOf(n.path);
-          const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
-          if (lines.length === 1) {
-            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 4 } }).textContent = lines[0];
-          } else {
-            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y - 3 } }).textContent = lines[0];
-            text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 10 } }).textContent = lines[1];
-          }
-          if (n.created) {
-            const badge = g.createSvg("g", { cls: "contexts-map-created" });
-            badge.createSvg("circle", { attr: { cx: p.x + 2, cy: p.y - h / 2 + 1, r: 5 } });
-            badge.createSvg("text", { attr: { x: p.x + 2, y: p.y - h / 2 + 4, "text-anchor": "middle" } }).textContent = "+";
-          }
-        }
-        if (runStart.has(n)) {
-          const sub = svg.createSvg("text", {
-            attr: { x: p.x, y: p.y - (isCompact(n, tree) ? 12 : heightOf(n.path) / 2 + 5) },
-            cls: "contexts-map-ctx-label",
-          });
-          sub.textContent = n.ctx;
-          sub.style.fill = colorOf(n.ctx);
-        }
-        // Hover card: the name with the sidebar trail's icon vocabulary
-        // (pencil = edited, book = read), then one quiet meta line. No path;
-        // the detail panel carries it.
-        this.tips.attach(g, (el) => {
-          const name = el.createDiv({ cls: "contexts-tip-name" });
-          setIcon(name.createSpan({ cls: "contexts-chip-icon" }), n.edits ? "pencil" : "book-open");
-          name.createSpan({ text: baseOf(n.path) });
-          const meta: string[] = [fmtClock(n.firstAt), `${fmtDur(n.dur)} engaged`, `${n.visits} visit${n.visits === 1 ? "" : "s"}`];
-          if (n.edits) meta.push(`${n.edits} edit${n.edits === 1 ? "" : "s"}`);
-          if (n.created) meta.push("created here");
-          meta.push(n.ctx ? `${sigils.get(n.ctx) ?? ""} ${n.ctx}`.trim() : "no context");
-          const local = this.plugin.localDeviceId();
-          const devs = [...new Set(n.devices?.filter((d) => d !== local) ?? [])];
-          if (devs.length) meta.push(`on ${devs.map((d) => this.plugin.deviceLabel(d)).join(", ")}`);
-          el.createDiv({ text: meta.join(" · "), cls: "contexts-tip-meta" });
-        });
-        g.addEventListener("click", (evt) => this.nodeClick(evt, n.path));
-        // The braid's correction menu, from here: move these visits, evict,
-        // unassign, or delete — covering this node's whole stretch.
-        g.addEventListener("contextmenu", (evt) => this.plugin.openSpanMenu(evt, n.ctx, n.path, n.firstAt, n.lastAt));
-        groupOf.set(n.path, g);
-        // The excursion badge: the user left the context and came back here.
-        // The elision is the point — the foreign files stay off the map.
-        if (n.away) {
-          const badge = svg.createSvg("g", { cls: "contexts-map-away" });
-          badge.createSvg("circle", { attr: { cx: p.x - 12, cy: p.y, r: 6 } });
-          badge.createSvg("text", { attr: { x: p.x - 12, y: p.y + 3, "text-anchor": "middle" } }).textContent = "⋯";
-          this.tips.attach(
-            badge,
-            `left ${this.soloed.size > 1 ? "the soloed set" : "the context"} ${n.away.times === 1 ? "once" : `${n.away.times}×`} before returning here · ${fmtDur(
-              n.away.dur
-            )} away · ${n.away.files} file${n.away.files === 1 ? "" : "s"} elsewhere`
-          );
-        }
-      }
-      for (const [path, g] of groupOf) {
-        const set = (on: boolean) => {
-          g.toggleClass("is-hover", on);
-          for (const t of touching.get(path) ?? []) {
-            t.el.toggleClass("is-hl", on);
-            groupOf.get(t.other)?.toggleClass("is-hl", on);
-          }
-        };
-        g.addEventListener("pointerenter", () => set(true));
-        g.addEventListener("pointerleave", () => set(false));
-      }
-    }
-
-    // Auto-fit bounds; the viewBox follows them until a zoom or pan freezes a manual viewport.
-    let x1 = 0;
-    for (const { pos } of placements) for (const p of pos.values()) x1 = Math.max(x1, p.x + p.w);
-    this.fitVB = { x: 0, y: -NAV_ROW_H, w: Math.max(x1 + 40, 400), h: Math.max(yCursor - TREE_GAP + NAV_ROW_H * 2, 200) };
+    const drawing = drawForest({
+      svg,
+      trees,
+      groupBy: this.groupBy,
+      colorOf,
+      sigils,
+      tips: this.tips,
+      deviceLabel: (id) => this.plugin.deviceLabel(id),
+      localDevice: this.plugin.localDeviceId(),
+      currentPath: this.plugin.lastActiveMdPath,
+      selected: this.selected,
+      compactReads: this.compactReads,
+      showEngagement: this.showEngagement,
+      soloedSize: this.soloed.size,
+      onNodeClick: (evt, path) => this.nodeClick(evt, path),
+      onNodeMenu: (evt, n) => this.plugin.openSpanMenu(evt, n.ctx, n.path, n.firstAt, n.lastAt),
+    });
+    this.fitVB = drawing.fit;
     this.applyVB();
 
     if (this.selected) {
-      const found = latestNode.get(this.selected);
+      const found = drawing.latestNode.get(this.selected);
       if (found) this.renderDetail(main, relEvents, found.tree, found.node, colorOf);
       else this.selected = null;
     }
@@ -965,4 +646,386 @@ export class MapView extends ItemView {
       list.createDiv({ text: "The session started here and stayed.", cls: "contexts-empty" });
     }
   }
+}
+
+/**
+ * The map's render core, extracted from the ItemView so the `contexts` code
+ * block can draw the same forest into a MarkdownRenderChild container. Pure
+ * drawing into cfg.svg: no pan/zoom, no viewBox management, no detail panel
+ * — the caller owns interaction. Returns the auto-fit bounds and where each
+ * path last appeared (the ItemView's detail panel needs the latter).
+ */
+export interface ForestDrawing {
+  fit: { x: number; y: number; w: number; h: number };
+  latestNode: Map<string, { tree: NavTree; node: NavNode }>;
+}
+
+/** Context colors: same palette, same first-appearance order as the braid's bands. */
+export function makeColorOf(relEvents: LogEvent[], gapMs: number): (ctx: string) => string {
+  const bandOrder: string[] = [];
+  for (const r of contextRuns(groupSessions(relEvents, gapMs), assignContexts(relEvents))) {
+    if (!bandOrder.includes(r.ctx)) bandOrder.push(r.ctx);
+  }
+  const colored = bandOrder.filter((c) => c !== "");
+  return (ctx: string) => {
+    if (ctx === "") return UNASSIGNED_COLOR;
+    const i = colored.indexOf(ctx);
+    return PALETTE[(i === -1 ? colored.length : i) % PALETTE.length];
+  };
+}
+
+export function drawForest(cfg: {
+  svg: SVGSVGElement;
+  trees: NavTree[];
+  groupBy: NavGroup;
+  colorOf: (ctx: string) => string;
+  sigils: Map<string, string>;
+  tips: HoverTip;
+  deviceLabel: (id: string) => string;
+  localDevice: string | null;
+  currentPath: string | null;
+  selected: string | null;
+  compactReads: boolean;
+  showEngagement: boolean;
+  soloedSize: number;
+  onNodeClick: (evt: MouseEvent, path: string) => void;
+  onNodeMenu?: (evt: MouseEvent, n: NavNode) => void;
+}): ForestDrawing {
+  const svg = cfg.svg;
+  const trees = cfg.trees;
+  const colorOf = cfg.colorOf;
+  const sigils = cfg.sigils;
+  // Label metrics from real text measurement, so columns stagger like
+  // Tangent's. Long names wrap to two lines; anything longer ellipsizes
+  // (the hover card always carries the full path).
+  const canvas = document.createElement("canvas");
+  const mctx = canvas.getContext("2d")!;
+  mctx.font = `500 12px ${getComputedStyle(document.body).fontFamily}`;
+  const baseOf = (path: string) => path.split("/").pop()?.replace(/\.md$/, "") ?? path;
+  const fit = (str: string): string => {
+    if (mctx.measureText(str).width <= MAX_LABEL_W) return str;
+    while (str && mctx.measureText(str + "…").width > MAX_LABEL_W) str = str.slice(0, -1);
+    return str + "…";
+  };
+  const lineCache = new Map<string, string[]>();
+  const linesOf = (path: string): string[] => {
+    let lines = lineCache.get(path);
+    if (lines) return lines;
+    const base = baseOf(path);
+    if (mctx.measureText(base).width <= MAX_LABEL_W) lines = [base];
+    else {
+      const words = base.split(" ");
+      let l1 = "";
+      let i = 0;
+      while (i < words.length) {
+        const next = l1 ? `${l1} ${words[i]}` : words[i];
+        if (l1 && mctx.measureText(next).width > MAX_LABEL_W) break;
+        l1 = next;
+        i++;
+      }
+      const l2 = words.slice(i).join(" ");
+      lines = l2 ? [fit(l1), fit(l2)] : [fit(l1)];
+    }
+    lineCache.set(path, lines);
+    return lines;
+  };
+  const widthOf = (path: string) =>
+    Math.max(...linesOf(path).map((l) => mctx.measureText(l).width)) + 32;
+  const heightOf = (path: string) => (linesOf(path).length > 1 ? 36 : NODE_H);
+
+  // Stack the session trees; remember where every path last appeared for
+  // trails and the detail panel (the latest session is the one that counts).
+  const COMPACT_W = 16;
+  // Brief pass-throughs compact even mid-tree: a dot keeps the chain
+  // visible while dropping the label. ponytail: fixed threshold; a
+  // settings knob if 30s turns out to be the wrong line.
+  const BRIEF_MS = 30_000;
+  // Never compacted: a tree's root and its chronologically last file —
+  // where the sitting began and where it ended anchor the reading.
+  const anchors = new Map<NavTree, Set<string>>();
+  const isCompact = (n: NavNode, tree: NavTree) =>
+    cfg.compactReads &&
+    !n.edits &&
+    !n.created &&
+    !anchors.get(tree)?.has(n.path) &&
+    n.path !== cfg.selected &&
+    n.path !== cfg.currentPath &&
+    (n.children.length === 0 || n.dur < BRIEF_MS);
+  const placements: { tree: NavTree; pos: Map<NavNode, { x: number; y: number; w: number }> }[] = [];
+  const latestNode = new Map<string, { tree: NavTree; node: NavNode }>();
+  let yCursor = 0;
+  for (const tree of trees) {
+    const nodeOf = new Map<string, NavNode>();
+    let last: NavNode = tree.root;
+    const walk = (n: NavNode): void => {
+      nodeOf.set(n.path, n);
+      if (n.lastAt > last.lastAt) last = n;
+      n.children.forEach(walk);
+    };
+    walk(tree.root);
+    anchors.set(tree, new Set([tree.root.path, last.path]));
+    const w = (path: string) => {
+      const n = nodeOf.get(path);
+      return n && isCompact(n, tree) ? COMPACT_W : widthOf(path);
+    };
+    const { pos, height } = layoutNavTree(tree.root, w, LEFT_X, yCursor);
+    placements.push({ tree, pos });
+    for (const n of pos.keys()) latestNode.set(n.path, { tree, node: n });
+    yCursor += height + TREE_GAP;
+  }
+
+  // The trail: root → the file the user is in right now, in its latest tree.
+  const current = cfg.currentPath;
+  const trail = new Set<string>();
+  let trailTree: NavTree | null = null;
+  if (current && latestNode.has(current)) {
+    trailTree = latestNode.get(current)!.tree;
+    let p: string | null | undefined = current;
+    while (p) {
+      trail.add(p);
+      p = trailTree.parentOf.get(p);
+    }
+  }
+
+  // Engagement scale: global across the forest, so a heavy day doesn't
+  // make a light day's files look important by local comparison.
+  let maxDur = 1;
+  for (const { pos } of placements) for (const n of pos.keys()) maxDur = Math.max(maxDur, n.dur);
+
+
+  // One arrowhead marker for every edge: fill follows the line's own
+  // stroke (context-stroke), and orient=auto flips it on backward curves.
+  const marker = svg.createSvg("defs").createSvg("marker", {
+    attr: {
+      id: "contexts-map-arrow",
+      viewBox: "0 0 8 8",
+      refX: 7,
+      refY: 4,
+      // Fixed user-space size: markers otherwise scale with stroke width,
+      // so thick (linked, trail) lines grew oversized heads.
+      markerUnits: "userSpaceOnUse",
+      markerWidth: 8,
+      markerHeight: 8,
+      orient: "auto-start-reverse",
+    },
+  });
+  marker.createSvg("path", { attr: { d: "M 0 0 L 8 4 L 0 8 z", fill: "context-stroke" } });
+
+  // A soft S-curve with horizontal tangents: the Tangent connector.
+  const curve = (x1: number, y1: number, x2: number, y2: number) => {
+    const mx = (x1 + x2) / 2;
+    return `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  };
+
+  for (const { tree, pos } of placements) {
+    const at = new Map<string, { x: number; y: number; w: number }>();
+    for (const [n, p] of pos) at.set(n.path, p);
+    const onTrail = (path: string) => tree === trailTree && trail.has(path);
+
+    // Tree label, left of the root: when this run of work began.
+    const rootPos = pos.get(tree.root)!;
+    const label = svg.createSvg("text", {
+      attr: { x: LEFT_X - 14, y: rootPos.y - 2, "text-anchor": "end" },
+      cls: "contexts-map-session",
+    });
+    const d = new Date(tree.start);
+    const line1 =
+      cfg.groupBy === "week"
+        ? `Week of ${new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7)).toLocaleDateString(undefined, { month: "numeric", day: "numeric" })}`
+        : cfg.groupBy === "month"
+        ? d.toLocaleDateString(undefined, { month: "short", year: "numeric" })
+        : relDay(tree.start);
+    label.createSvg("tspan", { attr: { x: LEFT_X - 14 } }).textContent = line1;
+    const line2 = cfg.groupBy === "week" || cfg.groupBy === "month" ? relDay(tree.start) : fmtClock(tree.start);
+    label.createSvg("tspan", { attr: { x: LEFT_X - 14, dy: 13 }, cls: "contexts-map-session-time" }).textContent = line2;
+
+    // Hover wiring: every edge registers with both endpoints, so mousing
+    // over a node can light its lines and, slightly, its neighbors.
+    const groupOf = new Map<string, SVGGElement>();
+    const touching = new Map<string, { el: SVGElement; other: string }[]>();
+    const touch = (a: string, b: string, el: SVGElement) => {
+      for (const [me, other] of [[a, b], [b, a]] as const) {
+        let list = touching.get(me);
+        if (!list) touching.set(me, (list = []));
+        list.push({ el, other });
+      }
+    };
+
+    // One line per pair of files, whatever the ties: the tree edge wins,
+    // upgraded to the "linked" style when a link was also written; among
+    // secondary ties alone, the strongest kind draws. Every tie still
+    // shows in the detail panel — this is drawing economy, not data loss.
+    const RANK = { linked: 3, revisit: 2, peek: 1 } as const;
+    const bestLink = new Map<string, (typeof tree.links)[number]>();
+    for (const link of tree.links) {
+      const key = pairKey(link.from, link.to);
+      const cur = bestLink.get(key);
+      if (!cur || RANK[link.kind] > RANK[cur.kind]) bestLink.set(key, link);
+    }
+    const parentPairs = new Set<string>();
+    // A pair tied in both directions gets a head on each end of its one line.
+    const dirs = new Set<string>();
+    for (const [child, parent] of tree.parentOf) if (parent) dirs.add(`${parent} ${child}`);
+    for (const l of tree.links) dirs.add(`${l.from} ${l.to}`);
+    const twoWay = (a: string, b: string) => dirs.has(`${a} ${b}`) && dirs.has(`${b} ${a}`);
+    // Tree edges first (under the nodes), then secondary curves, then nodes.
+    const drawEdges = (n: NavNode) => {
+      const pp = pos.get(n)!;
+      for (const c of n.children) {
+        const cp = pos.get(c)!;
+        const key = pairKey(n.path, c.path);
+        parentPairs.add(key);
+        const path = svg.createSvg("path", {
+          attr: { d: curve(pp.x + pp.w, pp.y, cp.x, cp.y) },
+          cls: "contexts-map-edge",
+        });
+        // A followed link reads at full strength; mere sequence is fainter;
+        // a pair that was also LINKED in text carries the strongest style.
+        if (bestLink.get(key)?.kind === "linked") path.addClass("is-linked");
+        else if (c.via === "seq") path.addClass("is-seq");
+        if (twoWay(n.path, c.path)) path.addClass("is-two-way");
+        if (onTrail(n.path) && onTrail(c.path) && trailTree!.parentOf.get(c.path) === n.path) path.addClass("is-trail");
+        touch(n.path, c.path, path);
+        drawEdges(c);
+      }
+    };
+    drawEdges(tree.root);
+    for (const link of bestLink.values()) {
+      if (parentPairs.has(pairKey(link.from, link.to))) continue; // the tree edge already carries this pair
+      const fp = at.get(link.from);
+      const tp = at.get(link.to);
+      if (!fp || !tp) continue;
+      const el = svg.createSvg("path", {
+        attr: { d: curve(fp.x + fp.w, fp.y, tp.x, tp.y) },
+        cls: ["contexts-map-edge", `is-${link.kind}`],
+      });
+      if (twoWay(link.from, link.to)) el.addClass("is-two-way");
+      touch(link.from, link.to, el);
+    }
+    // Context name once per same-context stretch (chronological order),
+    // small above the first node of each run — sigil every node, name once
+    // per stretch, color as reinforcement: three channels at three costs.
+    const runStart = new Set<NavNode>();
+    {
+      const ordered = [...pos.keys()].sort((a, b) => a.firstAt - b.firstAt);
+      let prev: string | null = null;
+      for (const n of ordered) {
+        if (n.ctx && n.ctx !== prev) runStart.add(n);
+        prev = n.ctx;
+      }
+    }
+    for (const [n, p] of pos) {
+      const g = svg.createSvg("g", { cls: "contexts-map-nav" });
+      if (n.edits) g.addClass("is-edited");
+      if (onTrail(n.path)) g.addClass("is-trail");
+      if (n.path === current && tree === trailTree) g.addClass("is-current");
+      if (n.path === cfg.selected) g.addClass("is-selected");
+      const heat = Math.sqrt(n.dur / maxDur);
+      if (isCompact(n, tree)) {
+        // A drive-by read: structure without a label. Hover says the rest.
+        g.addClass("is-mini");
+        const r = cfg.showEngagement ? 4 + 3 * heat : 5;
+        g.createSvg("circle", { attr: { cx: p.x + COMPACT_W / 2, cy: p.y, r }, cls: "contexts-map-mini" }).style.fill =
+          colorOf(n.ctx);
+      } else {
+        const h = heightOf(n.path);
+        const rect = g.createSvg("rect", { attr: { x: p.x, y: p.y - h / 2, width: p.w, height: h, rx: 6 } });
+        // The engagement wash: context color, deeper with engaged time —
+        // blended OPAQUE into the background (color-mix, not opacity), so
+        // connectors never show through behind the text. The current file
+        // keeps its accent wash instead.
+        if (cfg.showEngagement && !(n.path === current && tree === trailTree)) {
+          const pct = Math.round(5 + 30 * heat);
+          rect.style.fill = `color-mix(in srgb, ${colorOf(n.ctx)} ${pct}%, var(--background-primary))`;
+        }
+        const sig = sigils.get(n.ctx);
+        if (sig) {
+          const t = g.createSvg("text", {
+            attr: { x: p.x + 12, y: p.y + 3, "text-anchor": "middle" },
+            cls: "contexts-map-nav-sigil",
+          });
+          t.textContent = sig;
+          t.style.fill = colorOf(n.ctx);
+        } else {
+          g.createSvg("circle", { attr: { cx: p.x + 12, cy: p.y, r: 3 }, cls: "contexts-map-nav-dot" }).style.fill =
+            colorOf(n.ctx);
+        }
+        const lines = linesOf(n.path);
+        const text = g.createSvg("text", { cls: "contexts-map-nav-label" });
+        if (lines.length === 1) {
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 4 } }).textContent = lines[0];
+        } else {
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y - 3 } }).textContent = lines[0];
+          text.createSvg("tspan", { attr: { x: p.x + 21, y: p.y + 10 } }).textContent = lines[1];
+        }
+        if (n.created) {
+          const badge = g.createSvg("g", { cls: "contexts-map-created" });
+          badge.createSvg("circle", { attr: { cx: p.x + 2, cy: p.y - h / 2 + 1, r: 5 } });
+          badge.createSvg("text", { attr: { x: p.x + 2, y: p.y - h / 2 + 4, "text-anchor": "middle" } }).textContent = "+";
+        }
+      }
+      if (runStart.has(n)) {
+        const sub = svg.createSvg("text", {
+          attr: { x: p.x, y: p.y - (isCompact(n, tree) ? 12 : heightOf(n.path) / 2 + 5) },
+          cls: "contexts-map-ctx-label",
+        });
+        sub.textContent = n.ctx;
+        sub.style.fill = colorOf(n.ctx);
+      }
+      // Hover card: the name with the sidebar trail's icon vocabulary
+      // (pencil = edited, book = read), then one quiet meta line. No path;
+      // the detail panel carries it.
+      cfg.tips.attach(g, (el) => {
+        const name = el.createDiv({ cls: "contexts-tip-name" });
+        setIcon(name.createSpan({ cls: "contexts-chip-icon" }), n.edits ? "pencil" : "book-open");
+        name.createSpan({ text: baseOf(n.path) });
+        const meta: string[] = [fmtClock(n.firstAt), `${fmtDur(n.dur)} engaged`, `${n.visits} visit${n.visits === 1 ? "" : "s"}`];
+        if (n.edits) meta.push(`${n.edits} edit${n.edits === 1 ? "" : "s"}`);
+        if (n.created) meta.push("created here");
+        meta.push(n.ctx ? `${sigils.get(n.ctx) ?? ""} ${n.ctx}`.trim() : "no context");
+        const local = cfg.localDevice;
+        const devs = [...new Set(n.devices?.filter((d) => d !== local) ?? [])];
+        if (devs.length) meta.push(`on ${devs.map((d) => cfg.deviceLabel(d)).join(", ")}`);
+        el.createDiv({ text: meta.join(" · "), cls: "contexts-tip-meta" });
+      });
+      g.addEventListener("click", (evt) => cfg.onNodeClick(evt, n.path));
+      // The braid's correction menu, from here: move these visits, evict,
+      // unassign, or delete — covering this node's whole stretch.
+      if (cfg.onNodeMenu) g.addEventListener("contextmenu", (evt) => cfg.onNodeMenu!(evt, n));
+      groupOf.set(n.path, g);
+      // The excursion badge: the user left the context and came back here.
+      // The elision is the point — the foreign files stay off the map.
+      if (n.away) {
+        const badge = svg.createSvg("g", { cls: "contexts-map-away" });
+        badge.createSvg("circle", { attr: { cx: p.x - 12, cy: p.y, r: 6 } });
+        badge.createSvg("text", { attr: { x: p.x - 12, y: p.y + 3, "text-anchor": "middle" } }).textContent = "⋯";
+        cfg.tips.attach(
+          badge,
+          `left ${cfg.soloedSize > 1 ? "the soloed set" : "the context"} ${n.away.times === 1 ? "once" : `${n.away.times}×`} before returning here · ${fmtDur(
+            n.away.dur
+          )} away · ${n.away.files} file${n.away.files === 1 ? "" : "s"} elsewhere`
+        );
+      }
+    }
+    for (const [path, g] of groupOf) {
+      const set = (on: boolean) => {
+        g.toggleClass("is-hover", on);
+        for (const t of touching.get(path) ?? []) {
+          t.el.toggleClass("is-hl", on);
+          groupOf.get(t.other)?.toggleClass("is-hl", on);
+        }
+      };
+      g.addEventListener("pointerenter", () => set(true));
+      g.addEventListener("pointerleave", () => set(false));
+    }
+  }
+
+
+  // Auto-fit bounds for the caller's viewBox.
+  let x1 = 0;
+  for (const { pos } of placements) for (const p of pos.values()) x1 = Math.max(x1, p.x + p.w);
+  return {
+    fit: { x: 0, y: -NAV_ROW_H, w: Math.max(x1 + 40, 400), h: Math.max(yCursor - TREE_GAP + NAV_ROW_H * 2, 200) },
+    latestNode,
+  };
 }

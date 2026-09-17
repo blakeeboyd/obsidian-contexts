@@ -1,7 +1,7 @@
 import { App, EventRef, FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, Plugin, SuggestModal, TFile, parseYaml } from "obsidian";
 import { fmtEvent, fmtTime } from "./format";
 import { EventLog, getDeviceId, migrateLogDir } from "./log";
-import { DayBlock } from "./dayblock";
+import { ContextsBlock } from "./dayblock";
 import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import { BRAID_VIEW_TYPE, BraidView } from "./braid";
@@ -121,9 +121,12 @@ export default class ContextsPlugin extends Plugin {
     this.registerView(BRAID_VIEW_TYPE, (leaf) => new BraidView(leaf, this));
     this.registerView(MAP_VIEW_TYPE, (leaf) => new MapView(leaf, this));
     this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
-    this.registerMarkdownCodeBlockProcessor("contexts-day", (source, el, ctx) => {
-      ctx.addChild(new DayBlock(this, el, source, ctx.sourcePath));
-    });
+    // One language, two spellings: `contexts` is the block; `contexts-day` stays a working alias.
+    for (const lang of ["contexts", "contexts-day"]) {
+      this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
+        ctx.addChild(new ContextsBlock(this, el, source, ctx.sourcePath));
+      });
+    }
     this.patchOpenLinkText();
     this.patchSuggestModal();
 
@@ -745,7 +748,7 @@ export default class ContextsPlugin extends Plugin {
     new Notice(`Contexts: log moved to ${folder}`);
   }
 
-  private dayBlocks = new Set<DayBlock>();
+  private dayBlocks = new Set<ContextsBlock>();
   private refreshTimer: number | null = null;
 
   /** The plugin's own views announce the opens they cause, so the record knows the arrival surface. */
@@ -766,11 +769,11 @@ export default class ContextsPlugin extends Plugin {
     return this.app.metadataCache.getFileCache(file)?.frontmatter?.["context-role"] === "bridge";
   }
 
-  registerDayBlock(block: DayBlock): void {
+  registerDayBlock(block: ContextsBlock): void {
     this.dayBlocks.add(block);
   }
 
-  unregisterDayBlock(block: DayBlock): void {
+  unregisterDayBlock(block: ContextsBlock): void {
     this.dayBlocks.delete(block);
   }
 
@@ -827,7 +830,7 @@ export default class ContextsPlugin extends Plugin {
   }
 
   /** Braid and map are full views: they open as main-area tabs, not sidebar panes. */
-  private async activateFullView(type: string): Promise<void> {
+  async activateFullView(type: string): Promise<void> {
     const existing = this.app.workspace.getLeavesOfType(type)[0];
     const leaf = existing ?? this.app.workspace.getLeaf(true);
     if (!existing) await leaf.setViewState({ type, active: true });

@@ -361,6 +361,37 @@
   font-size: 12px;
 }
 
+.contexts-block-map {
+  position: relative;
+}
+
+.contexts-block-map-svg {
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  display: block;
+  cursor: default;
+}
+
+.contexts-block-open {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0.5;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.contexts-block-open:hover {
+  opacity: 1;
+}
+
+.contexts-block-open svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
 .contexts-derived-label {
   font-style: italic;
   opacity: 0.7;

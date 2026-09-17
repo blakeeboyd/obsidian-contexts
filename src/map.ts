@@ -109,6 +109,8 @@ export class MapView extends ItemView {
   private showEngagement = true;
   // Range scope: chosen start/end days (local midnights), from the picker.
   private range: { from: number; to: number } | null = null;
+  // Device filter: null = all devices (the default and the merged truth).
+  private deviceFilter: string | null = null;
   private selected: string | null = null;
   private tips = new HoverTip();
   private svgEl: SVGSVGElement | null = null;
@@ -247,8 +249,27 @@ export class MapView extends ItemView {
     const orderBtn = header.createEl("button", { cls: "contexts-braid-seg-btn contexts-map-order" });
     setIcon(orderBtn, this.newestFirst ? "arrow-down-wide-narrow" : "arrow-up-narrow-wide");
     orderBtn.setAttribute("aria-label", "Grouping and order");
+    // Devices seen in the record, for the filter (shown only when plural).
+    const deviceIds = [...new Set(relEvents.filter(isSpan).map((sp) => sp.device).filter((d): d is string => !!d))];
     orderBtn.addEventListener("click", (evt) => {
       const menu = new Menu();
+      if (deviceIds.length > 1) {
+        const dev = (label: string, id: string | null) =>
+          menu.addItem((i) =>
+            i
+              .setTitle(label)
+              .setChecked(this.deviceFilter === id)
+              .onClick(() => {
+                if (this.deviceFilter === id) return;
+                this.deviceFilter = id;
+                this.manualVB = null;
+                void this.render();
+              })
+          );
+        dev("All devices", null);
+        for (const id of deviceIds) dev(this.plugin.deviceLabel(id), id);
+        menu.addSeparator();
+      }
       const group = (label: string, g: NavGroup) =>
         menu.addItem((i) =>
           i
@@ -303,13 +324,25 @@ export class MapView extends ItemView {
       menu.showAtMouseEvent(evt);
     });
     header.createSpan({
-      text: "click a note for its detail · ⌘-click opens it · ⌘-scroll zooms · drag pans",
+      // An active device filter announces itself; a silent filter reads as missing data.
+      text: `${this.deviceFilter ? `${this.plugin.deviceLabel(this.deviceFilter)} only · ` : ""}click a note for its detail · ⌘-click opens it · ⌘-scroll zooms · drag pans`,
       cls: "contexts-braid-hint",
     });
 
+    // The device filter drops behavioral events (visits, peeks, creates)
+    // from other devices; structural events (declarations, corrections,
+    // renames) always apply — they're judgments about the vault, not acts
+    // on a particular machine.
+    const mapEvents = this.deviceFilter
+      ? relEvents.filter((ev) => {
+          if (isSpan(ev)) return ev.device === this.deviceFilter;
+          if ("type" in ev && (ev.type === "peek" || ev.type === "create")) return ev.device === this.deviceFilter;
+          return true;
+        })
+      : relEvents;
     const scopeArg: { from?: number; to?: number; ctx?: string } = {};
     if (this.mapScope === "session") {
-      const sessions = groupSessions(relEvents, gapMs);
+      const sessions = groupSessions(mapEvents, gapMs);
       if (sessions.length) scopeArg.from = sessions[sessions.length - 1].start;
     } else if (this.mapScope === "day") scopeArg.from = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
     else if (this.mapScope === "context") scopeArg.ctx = this.ctxChoice ?? names[0] ?? "";
@@ -319,7 +352,7 @@ export class MapView extends ItemView {
       const d = new Date(this.range.to);
       scopeArg.to = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1;
     }
-    const trees = buildNavForest(relEvents, scopeArg, gapMs, this.groupBy);
+    const trees = buildNavForest(mapEvents, scopeArg, gapMs, this.groupBy);
     if (this.newestFirst) trees.reverse();
     if (!trees.length) {
       contentEl.createDiv({ text: "Nothing in this scope yet. Work in some notes and come back.", cls: "contexts-empty" });

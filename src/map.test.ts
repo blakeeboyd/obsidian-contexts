@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LogEvent, SpanEvent } from "./recorder";
-import { NavNode, buildNavForest, layoutNavTree } from "./views";
+import { NavNode, applyErasures, buildNavForest, layoutNavTree } from "./views";
 
 const MIN = 60_000;
 
@@ -182,5 +182,21 @@ describe("layoutNavTree", () => {
     const leftMax = Math.max(...left.children.map((n) => pos.get(n)!.y), pos.get(left)!.y);
     const rightMin = Math.min(...right.children.map((n) => pos.get(n)!.y), pos.get(right)!.y);
     expect(leftMax).toBeLessThan(rightMin);
+  });
+});
+
+describe("baseline dedupe (sync lag)", () => {
+  it("keeps the earliest firstseen per file, allowing a fresh one after rebirth", () => {
+    const fs = (t: number, path: string): LogEvent => ({ t, type: "firstseen", path, counts: { words: 0, links: 0, tags: 0, headings: 0, highlights: 0, footnotes: 0, tasksOpen: 0, tasksDone: 0 } } as LogEvent);
+    const events: LogEvent[] = [
+      fs(1, "A.md"), // Mac met it first
+      fs(2, "A.md"), // phone met it before the shards crossed
+      { t: 3, type: "delete", path: "A.md" },
+      { t: 4, type: "create", path: "A.md" },
+      fs(5, "A.md"), // reborn: a fresh baseline is legitimate
+    ];
+    const out = applyErasures(events);
+    const baselines = out.filter((ev) => "type" in ev && ev.type === "firstseen");
+    expect(baselines.map((ev) => ev.t)).toEqual([1, 5]);
   });
 });

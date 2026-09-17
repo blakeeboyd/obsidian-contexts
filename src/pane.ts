@@ -410,6 +410,20 @@ export class ContextsPane extends ItemView {
         row.addEventListener("click", () => (details.hidden = !details.hidden));
       }
     }
+    // Files older than the plugin still have a birth: show the filesystem's
+    // creation date when no create was ever logged. Labeled as the
+    // filesystem's word — a synced copy's ctime is its arrival on this
+    // device, not necessarily the true origin.
+    if (!trail.some((ev) => !isStint(ev) && ev.type === "create")) {
+      const f = this.app.vault.getAbstractFileByPath(path);
+      if (f instanceof TFile) {
+        const row = contentEl.createDiv({ cls: "contexts-trail-row" });
+        const line = row.createDiv({ cls: "contexts-event-line contexts-trail-delta" });
+        line.createSpan({ text: `${fmtTime(f.stat.ctime)} · ` });
+        setIcon(line.createSpan({ cls: "contexts-chip-icon" }), "file-plus");
+        line.createSpan({ text: " created (filesystem date)" });
+      }
+    }
   }
 
   /**

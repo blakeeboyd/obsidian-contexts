@@ -1,4 +1,4 @@
-import { AbstractInputSuggest, App, PluginSettingTab, Setting, TFolder } from "obsidian";
+import { AbstractInputSuggest, App, Modal, PluginSettingTab, Setting, TFile, TFolder } from "obsidian";
 import type ContextsPlugin from "./main";
 
 /** Folder-path autocomplete for a text input (the Foliate taxa-folder pattern). */
@@ -23,6 +23,97 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
     this.input.value = folder.path;
     this.onPick(folder.path);
     this.close();
+  }
+}
+
+/** Folder-or-file autocomplete: folders first, then markdown files. */
+class PathSuggest extends AbstractInputSuggest<string> {
+  constructor(app: App, private input: HTMLInputElement, private onPick: (path: string) => void) {
+    super(app, input);
+  }
+
+  getSuggestions(query: string): string[] {
+    const q = query.toLowerCase();
+    const all = this.app.vault.getAllLoadedFiles();
+    const folders = all
+      .filter((f): f is TFolder => f instanceof TFolder && f.path !== "/" && f.path.toLowerCase().includes(q))
+      .map((f) => f.path)
+      .sort();
+    const files = all
+      .filter((f): f is TFile => f instanceof TFile && f.extension === "md" && f.path.toLowerCase().includes(q))
+      .map((f) => f.path)
+      .sort();
+    return [...folders, ...files].slice(0, 50);
+  }
+
+  renderSuggestion(path: string, el: HTMLElement): void {
+    el.setText(path);
+  }
+
+  selectSuggestion(path: string): void {
+    this.input.value = path;
+    this.onPick(path);
+    this.close();
+  }
+}
+
+/**
+ * Manage one scope list (folders and single files alike — the matchers
+ * treat an exact path as itself) in a modal, so the settings page stays a
+ * two-line summary instead of an open-ended list.
+ */
+class ScopeModal extends Modal {
+  constructor(
+    app: App,
+    private plugin: ContextsPlugin,
+    private title: string,
+    private paths: string[],
+    private onChange: () => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    this.titleEl.setText(this.title);
+    // Legacy "Add folder" rows left empty strings behind; drop them once.
+    for (let i = this.paths.length - 1; i >= 0; i--) if (!this.paths[i]) this.paths.splice(i, 1);
+    this.renderList();
+  }
+
+  private renderList(): void {
+    const el = this.contentEl;
+    el.empty();
+    const addRow = el.createDiv({ cls: "contexts-scope-add" });
+    const input = addRow.createEl("input", { type: "text", cls: "contexts-name-input" });
+    input.placeholder = "Add a folder or note…";
+    const commit = async (v: string) => {
+      v = v.trim().replace(/\/+$/, "");
+      if (!v || this.paths.includes(v)) return;
+      this.paths.push(v);
+      await this.plugin.saveSettings();
+      this.onChange();
+      this.renderList();
+    };
+    new PathSuggest(this.app, input, (p) => void commit(p));
+    input.addEventListener("keydown", (evt) => {
+      if (evt.key === "Enter") void commit(input.value);
+    });
+    input.focus();
+    for (let i = 0; i < this.paths.length; i++) {
+      new Setting(el).setName(this.paths[i]).addExtraButton((b) =>
+        b.setIcon("trash").setTooltip("Remove").onClick(async () => {
+          this.paths.splice(i, 1);
+          await this.plugin.saveSettings();
+          this.onChange();
+          this.renderList();
+        })
+      );
+    }
+    if (!this.paths.length) el.createDiv({ text: "Nothing here yet.", cls: "contexts-empty" });
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
 
@@ -142,28 +233,6 @@ export class ContextsSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  /** An editable folder list (search input with suggestions + remove button per row), mutating `folders` in place. */
-  private folderList(containerEl: HTMLElement, folders: string[]): void {
-    folders.forEach((folder, i) => {
-      const save = async (v: string) => {
-        folders[i] = v.trim().replace(/\/+$/, "");
-        await this.plugin.saveSettings();
-      };
-      new Setting(containerEl)
-        .addSearch((search) => {
-          search.setPlaceholder("Folder path").setValue(folder).onChange(save);
-          new FolderSuggest(this.app, search.inputEl, (path) => void save(path));
-        })
-        .addExtraButton((b) =>
-          b.setIcon("trash").setTooltip("Remove").onClick(async () => {
-            folders.splice(i, 1);
-            await this.plugin.saveSettings();
-            this.display();
-          })
-        );
-    });
-  }
-
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -186,33 +255,33 @@ export class ContextsSettingTab extends PluginSettingTab {
         search.inputEl.addEventListener("blur", () => void this.plugin.setLogFolder(search.inputEl.value));
       });
 
-    new Setting(containerEl)
-      .setName("Excluded folders")
-      .setDesc("Files in these folders are still recorded and keep their own trail, but stay out of contexts and relatedness.")
-      .addButton((b) =>
-        b.setButtonText("Add folder").onClick(async () => {
-          this.plugin.settings.excludedFolders.push("");
-          await this.plugin.saveSettings();
-          this.display();
+    // Both lists take folders AND single files (the matcher treats an exact
+    // path as itself); managed in a modal so the settings page stays short.
+    const scopeRow = (name: string, desc: string, paths: string[]) => {
+      const count = () =>
+        paths.filter(Boolean).length === 0
+          ? "Nothing yet"
+          : `${paths.filter(Boolean).length} folder${paths.filter(Boolean).length === 1 ? "" : "s"} and files`;
+      const row = new Setting(containerEl).setName(name).setDesc(desc);
+      const counter = row.descEl.createDiv({ text: count(), cls: "contexts-scope-count" });
+      row.addButton((b) =>
+        b.setButtonText("Manage…").onClick(() => {
+          new ScopeModal(this.app, this.plugin, name, paths, () => counter.setText(count())).open();
         })
       );
+    };
 
-    this.folderList(containerEl, this.plugin.settings.excludedFolders);
+    scopeRow(
+      "Excluded from contexts",
+      "Folders and files that are still recorded and keep their own trail, but stay out of contexts and relatedness — the privacy line.",
+      this.plugin.settings.excludedFolders
+    );
 
-    new Setting(containerEl)
-      .setName("Bridge folders")
-      .setDesc(
-        "Files here (daily notes, inboxes) inherit every context they're visited under, but opening one never switches your context — they bridge contexts instead of belonging to one. Frontmatter `context-role: bridge` marks a single file the same way."
-      )
-      .addButton((b) =>
-        b.setButtonText("Add folder").onClick(async () => {
-          this.plugin.settings.bridgeFolders.push("");
-          await this.plugin.saveSettings();
-          this.display();
-        })
-      );
-
-    this.folderList(containerEl, this.plugin.settings.bridgeFolders);
+    scopeRow(
+      "Bridge files",
+      "Folders and files (daily notes, inboxes) that inherit every context they're visited under, but never switch your context when opened. Frontmatter `context-role: bridge` marks a single file the same way.",
+      this.plugin.settings.bridgeFolders
+    );
 
     new Setting(containerEl)
       .setName("Device names")

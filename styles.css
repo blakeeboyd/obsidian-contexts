@@ -432,6 +432,16 @@
   display: block;
 }
 
+.contexts-scope-count {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
+
+.contexts-scope-add {
+  margin-bottom: 10px;
+}
+
 .contexts-block-hint {
   position: absolute;
   bottom: 7px;

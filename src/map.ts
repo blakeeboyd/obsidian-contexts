@@ -205,8 +205,17 @@ export class MapView extends ItemView {
     const relEvents = excludeFolders(events, s.excludedFolders);
     const names = contextNames(relEvents);
 
-    // Header: scope control in the braid's segmented register.
+    // Header: rail toggle far left (it controls the leftmost panel), then
+    // the scope control in the braid's segmented register.
     const header = contentEl.createDiv({ cls: "contexts-braid-header" });
+    const railBtn = header.createEl("button", { cls: "contexts-braid-seg-btn" });
+    setIcon(railBtn, "panel-left");
+    railBtn.setAttribute("aria-label", this.railOpen ? "Hide context rail" : "Show context rail");
+    if (this.railOpen) railBtn.addClass("is-active");
+    railBtn.addEventListener("click", () => {
+      this.railOpen = !this.railOpen;
+      void this.render();
+    });
     const seg = header.createDiv({ cls: "contexts-braid-seg" });
     // Days that actually hold activity, for the range picker.
     const activeDays = [...new Set(relEvents.filter(isSpan).map((sp) => localDay(sp.start)))].sort((a, b) => a - b);
@@ -230,14 +239,6 @@ export class MapView extends ItemView {
         void this.render();
       });
     }
-    const railBtn = header.createEl("button", { cls: "contexts-braid-seg-btn" });
-    setIcon(railBtn, "panel-left");
-    railBtn.setAttribute("aria-label", this.railOpen ? "Hide context rail" : "Show context rail");
-    if (this.railOpen) railBtn.addClass("is-active");
-    railBtn.addEventListener("click", () => {
-      this.railOpen = !this.railOpen;
-      void this.render();
-    });
     const zoomWrap = header.createDiv({ cls: "contexts-braid-zoom" });
     const zoomBtn = (icon: string, label: string, onClick: () => void) => {
       const b = zoomWrap.createEl("button", { cls: "contexts-braid-seg-btn" });
@@ -792,6 +793,12 @@ export function drawForest(cfg: {
   let maxDur = 1;
   for (const { pos } of placements) for (const n of pos.keys()) maxDur = Math.max(maxDur, n.dur);
 
+  // Whether more than one context is in view — the stretch subheaders only
+  // earn their ink when there is something to tell apart.
+  const seenCtx = new Set<string>();
+  for (const { pos } of placements) for (const n of pos.keys()) if (n.ctx) seenCtx.add(n.ctx);
+  const multiCtx = seenCtx.size > 1;
+
 
   // One arrowhead marker for every edge: fill follows the line's own
   // stroke (context-stroke), and orient=auto flips it on backward curves.
@@ -905,8 +912,10 @@ export function drawForest(cfg: {
     // Context name once per same-context stretch (chronological order),
     // small above the first node of each run — sigil every node, name once
     // per stretch, color as reinforcement: three channels at three costs.
+    // With a single context in view the labels would all repeat one name
+    // (a soloed context, a one-context day): say nothing.
     const runStart = new Set<NavNode>();
-    {
+    if (multiCtx) {
       const ordered = [...pos.keys()].sort((a, b) => a.firstAt - b.firstAt);
       let prev: string | null = null;
       for (const n of ordered) {
@@ -995,7 +1004,10 @@ export function drawForest(cfg: {
       groupOf.set(n.path, g);
       // The excursion badge: the user left the context and came back here.
       // The elision is the point — the foreign files stay off the map.
-      if (n.away) {
+      // Never on the root: a later return to the tree's first file would
+      // hang a ⋯ before the first box, and a series should begin with the
+      // first file, not an aside.
+      if (n.away && n !== tree.root) {
         const badge = svg.createSvg("g", { cls: "contexts-map-away" });
         badge.createSvg("circle", { attr: { cx: p.x - 12, cy: p.y, r: 6 } });
         badge.createSvg("text", { attr: { x: p.x - 12, y: p.y + 3, "text-anchor": "middle" } }).textContent = "⋯";

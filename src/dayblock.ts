@@ -5,17 +5,20 @@
  * re-renders as events land. All properties optional:
  *
  *   view: map            # list | map            (default list; braid later)
- *   pace: week           # session | today | yesterday | week | month | all
+ *   over: week           # session | today | yesterday | week | month | all
  *                        #   | 2026-09-14 | 2026-09-01..2026-09-14
  *   context: context 3   # filter; comma list; "none" = no context
  *   device: iPhone       # filter; user device names honored
  *   group: day           # grain override (session | day | week | month)
  *
+ * ("over" names the time span shown; "pace" — the word the design session
+ * used — is accepted as a silent alias, but pace is a rate, not a span.)
  * Bare block = one day, all contexts: in a note whose filename carries a
  * date, the NOTE's day (template blocks in daily notes work forever),
  * otherwise today. Relative words resolve at read time; date literals pin.
- * Interaction stays minimal — hover cards and click-to-open; the corner
- * "open in File Map" affordance is the door to the deep dive.
+ * Interaction: hover cards, click-to-open, drag to pan, ⌘/ctrl-wheel or
+ * pinch to zoom, double-click to refit; plain scroll stays with the note.
+ * The corner "open in File Map" affordance is the door to the deep dive.
  * Provenance: Blake's codebox-mirror idea; Dataview's block-as-query pattern.
  */
 import { MarkdownRenderChild, setIcon } from "obsidian";
@@ -41,14 +44,14 @@ const DAY_MS = 24 * 3600_000;
 
 export interface BlockProps {
   view: "list" | "map";
-  pace: string | null;
+  over: string | null;
   contexts: string[] | null;
   devices: string[] | null;
   group: NavGroup | null;
 }
 
 export function parseProps(source: string): BlockProps {
-  const p: BlockProps = { view: "list", pace: null, contexts: null, devices: null, group: null };
+  const p: BlockProps = { view: "list", over: null, contexts: null, devices: null, group: null };
   const list = (val: string) =>
     val
       .replace(/^\[|\]$/g, "")
@@ -60,14 +63,14 @@ export function parseProps(source: string): BlockProps {
     if (!line) continue;
     const m = line.match(/^(\w+)\s*:\s*(.+)$/);
     if (!m) {
-      // Legacy contexts-day body: a bare date line is the pace.
-      if (/^\d{4}-\d{2}-\d{2}/.test(line)) p.pace = line;
+      // Legacy contexts-day body: a bare date line is the span.
+      if (/^\d{4}-\d{2}-\d{2}/.test(line)) p.over = line;
       continue;
     }
     const key = m[1].toLowerCase();
     const val = m[2].trim();
     if (key === "view" && (val === "list" || val === "map")) p.view = val;
-    else if (key === "pace") p.pace = val;
+    else if (key === "over" || key === "pace") p.over = val;
     else if (key === "context") p.contexts = list(val);
     else if (key === "device") p.devices = list(val);
     else if (key === "group" && ["session", "day", "week", "month"].includes(val)) p.group = val as NavGroup;
@@ -76,12 +79,12 @@ export function parseProps(source: string): BlockProps {
 }
 
 /**
- * Pace → time window + grain "one step down": today → session trees, week →
- * day trees, month → week trees, all → month trees. Calendar-anchored to the
- * note's day where a calendar unit is named.
+ * The span shown → time window + grain "one step down": today → session
+ * trees, week → day trees, month → week trees, all → month trees.
+ * Calendar-anchored to the note's day where a calendar unit is named.
  */
-export function resolvePace(
-  pace: string | null,
+export function resolveOver(
+  over: string | null,
   anchorDay: number,
   events: LogEvent[],
   gapMs: number
@@ -90,20 +93,20 @@ export function resolvePace(
     const d = new Date(t);
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1;
   };
-  const range = pace?.match(/^(\d{4}-\d{2}-\d{2})\s*\.\.\s*(\d{4}-\d{2}-\d{2})$/);
+  const range = over?.match(/^(\d{4}-\d{2}-\d{2})\s*\.\.\s*(\d{4}-\d{2}-\d{2})$/);
   if (range) {
     const a = new Date(`${range[1]}T00:00:00`).getTime();
     const b = new Date(`${range[2]}T00:00:00`).getTime();
     return { from: Math.min(a, b), to: dayEnd(Math.max(a, b)), grain: "day" };
   }
-  if (pace && /^\d{4}-\d{2}-\d{2}$/.test(pace)) {
-    const a = new Date(`${pace}T00:00:00`).getTime();
+  if (over && /^\d{4}-\d{2}-\d{2}$/.test(over)) {
+    const a = new Date(`${over}T00:00:00`).getTime();
     return { from: a, to: dayEnd(a), grain: "session" };
   }
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const a = new Date(anchorDay);
-  switch (pace) {
+  switch (over) {
     case "session": {
       const sessions = groupSessions(events, gapMs);
       return { from: sessions.length ? sessions[sessions.length - 1].start : today, grain: "session" };
@@ -198,7 +201,7 @@ export class ContextsBlock extends MarkdownRenderChild {
       ? new Set(props.contexts.map((n) => (["none", "no context", "(no context)"].includes(n.toLowerCase()) ? "" : n)))
       : null;
 
-    const win = resolvePace(props.pace, this.anchorDay(), devEvents, gapMs);
+    const win = resolveOver(props.over, this.anchorDay(), devEvents, gapMs);
     const grain = props.group ?? win.grain;
 
     if (props.view === "map" || ctxSet) {
@@ -254,13 +257,71 @@ export class ContextsBlock extends MarkdownRenderChild {
       // openLinkText so provenance capture sees the arrival.
       onNodeClick: (_evt, path) => void this.plugin.app.workspace.openLinkText(path, this.sourcePath),
     });
-    // Auto-fit, no zoom or pan: the block sizes itself and the NOTE scrolls.
-    svg.setAttribute("viewBox", `${drawing.fit.x} ${drawing.fit.y} ${drawing.fit.w} ${drawing.fit.h}`);
-    svg.style.aspectRatio = `${drawing.fit.w} / ${drawing.fit.h}`;
+    // Auto-fit start, then drag to pan, ⌘/ctrl-wheel (and trackpad pinch) to
+    // zoom about the cursor, double-click to refit. Plain scroll deliberately
+    // stays with the NOTE — an embedded block must not hijack page scroll.
+    const fit = drawing.fit;
+    let vb = { ...fit };
+    const apply = () => svg.setAttribute("viewBox", `${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`);
+    apply();
+    svg.style.aspectRatio = `${fit.w} / ${fit.h}`;
+    const toVB = (x: number, y: number): DOMPoint | null => {
+      const m = svg.getScreenCTM();
+      return m ? new DOMPoint(x, y).matrixTransform(m.inverse()) : null;
+    };
+    svg.addEventListener(
+      "wheel",
+      (evt: WheelEvent) => {
+        if (!evt.ctrlKey && !evt.metaKey) return;
+        evt.preventDefault();
+        // Same clamp as the File Map: 16x in, 2x out from fit.
+        const w = Math.min(Math.max(vb.w / Math.exp(-evt.deltaY * 0.004), fit.w / 16), fit.w * 2);
+        if (w === vb.w) return;
+        const p = toVB(evt.clientX, evt.clientY);
+        if (!p) return;
+        const k = w / vb.w;
+        vb = { x: p.x - (p.x - vb.x) * k, y: p.y - (p.y - vb.y) * k, w, h: vb.h * k };
+        apply();
+      },
+      { passive: false }
+    );
+    svg.addEventListener("dblclick", () => {
+      vb = { ...fit };
+      apply();
+    });
+    // Button 0 only, with pointercancel as safety release (a right-click's
+    // pointerup is swallowed by the menu it opens).
+    svg.addEventListener("pointerdown", (evt: PointerEvent) => {
+      if (evt.button !== 0 || evt.target !== svg) return;
+      const grab = toVB(evt.clientX, evt.clientY);
+      if (!grab) return;
+      svg.setPointerCapture(evt.pointerId);
+      const move = (mv: PointerEvent) => {
+        const p = toVB(mv.clientX, mv.clientY);
+        if (!p) return;
+        vb = { ...vb, x: vb.x + grab.x - p.x, y: vb.y + grab.y - p.y };
+        apply();
+      };
+      const up = () => {
+        svg.removeEventListener("pointermove", move);
+        svg.removeEventListener("pointerup", up);
+        svg.removeEventListener("pointercancel", up);
+      };
+      svg.addEventListener("pointermove", move);
+      svg.addEventListener("pointerup", up);
+      svg.addEventListener("pointercancel", up);
+    });
+    // Bottom-right, away from Live Preview's own edit-block pencil at the
+    // top-right; stopPropagation keeps the click from also dropping the
+    // cursor into the block's source.
     const openBtn = wrap.createDiv({ cls: "contexts-block-open" });
     setIcon(openBtn, "waypoints");
     openBtn.setAttribute("aria-label", "Open in File Map");
-    openBtn.addEventListener("click", () => void this.plugin.activateFullView(MAP_VIEW_TYPE));
+    openBtn.addEventListener("mousedown", (evt) => evt.stopPropagation());
+    openBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      void this.plugin.activateFullView(MAP_VIEW_TYPE);
+    });
   }
 
   /** The session list, the original contexts-day picture, over any window. */

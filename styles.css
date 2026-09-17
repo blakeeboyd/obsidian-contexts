@@ -370,12 +370,11 @@
   height: auto;
   max-height: 70vh;
   display: block;
-  cursor: default;
 }
 
 .contexts-block-open {
   position: absolute;
-  top: 4px;
+  bottom: 4px;
   right: 4px;
   opacity: 0.5;
   cursor: pointer;

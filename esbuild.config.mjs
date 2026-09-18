@@ -31,15 +31,15 @@ const context = await esbuild.context({
 });
 
 /**
- * Copy the built plugin into a vault, if MUNINN_VAULT names one.
+ * Copy the built plugin into a vault, if NORN_VAULT names one.
  * Opt-in by env var rather than a hardcoded path, so a clone on another
  * machine builds without needing this vault to exist. (Same pattern as
  * Foliate; a stale vault copy is invisible from inside Obsidian.)
  */
 async function deploy() {
-  const vault = process.env.MUNINN_VAULT;
+  const vault = process.env.NORN_VAULT;
   if (!vault) return;
-  const dest = `${vault}/.obsidian/plugins/muninn`;
+  const dest = `${vault}/.obsidian/plugins/norn`;
   const { copyFile, mkdir } = await import("node:fs/promises");
   await mkdir(dest, { recursive: true });
   // data.json is user settings, and log/ is the irreplaceable record: never copied over.

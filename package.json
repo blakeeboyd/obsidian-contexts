@@ -1,12 +1,12 @@
 {
-  "name": "obsidian-muninn",
+  "name": "obsidian-norn",
   "version": "0.1.0",
   "description": "Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
   "main": "main.js",
   "scripts": {
-    "dev": "MUNINN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs",
+    "dev": "NORN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
-    "deploy": "MUNINN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs production",
+    "deploy": "NORN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs production",
     "test": "vitest run"
   },
   "keywords": [],

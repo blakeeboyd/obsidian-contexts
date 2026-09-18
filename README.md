@@ -1,22 +1,18 @@
-# Muninn
+# Norn
 
 **Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.**
 
-Muninn records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
+Norn records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
 
-The vault already knows what your notes say. Muninn records what you did with them.
+The vault already knows what your notes say. Norn records what you did with them.
 
-> Huginn and Muninn fly each day over the wide world. I fear for Huginn, that he may not come back; yet more anxious am I for Muninn.
->
-> Odin, in the *Grímnismál*. Huginn is thought; Muninn is memory.
-
-Say it *MOO-nin* (rhymes with "moon in"). Huginn, the other raven, is *HOO-gin* with a hard g. Both are Old Norse, and both spellings drift; the double n is the one on the manifest.
+The Norns are the three sisters who sit at the well beneath the world-tree and, in the *Völuspá*, "cut on wood" the record of what is and will be: **Urd**, what has come to pass; **Verdandi**, what is becoming; **Skuld**, what shall be. The plugin keeps all three tenses: the trail behind you, the sitting you are in, and the guess about where you are going. Say it *NORN*, rhymes with "born." The icon is the braid: three strands, one record.
 
 **Status: beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
 
 ## What it records, and where
 
-Everything goes into one folder in your vault, `Muninn Log/` by default, as plain JSONL text files: one file per device per month (for example `850nr6-2026-09.jsonl`). The log is append-only. Every view in the plugin is computed from it at read time, so nothing else is stored, and deleting the folder deletes the record.
+Everything goes into one folder in your vault, `Norn Log/` by default, as plain JSONL text files: one file per device per month (for example `850nr6-2026-09.jsonl`). The log is append-only. Every view in the plugin is computed from it at read time, so nothing else is stored, and deleting the folder deletes the record.
 
 What lands in the log:
 
@@ -40,11 +36,11 @@ You control the capture:
 
 ## Install
 
-Muninn is distributed through [BRAT](https://github.com/TfTHacker/obsidian42-brat) during the beta.
+Norn is distributed through [BRAT](https://github.com/TfTHacker/obsidian42-brat) during the beta.
 
 1. Install and enable BRAT from Community plugins.
-2. In BRAT settings, choose "Add beta plugin" and enter `blakeeboyd/obsidian-muninn`.
-3. Enable Muninn in Community plugins.
+2. In BRAT settings, choose "Add beta plugin" and enter `blakeeboyd/obsidian-norn`.
+3. Enable Norn in Community plugins.
 
 To use it on more than one device, turn on **Sync all other types** in Obsidian Sync's settings on every device. Without it the `.jsonl` log files stay on the device that wrote them.
 
@@ -83,12 +79,12 @@ The **rail** lists every context as a row: sigil, color, name, a compass on the 
 
 Click a node for its detail panel: memberships, stats, and every tie to other nodes. ⌘-click opens the note.
 
-### The `muninn` code block
+### The `norn` code block
 
 Embed a live view in any note. The block is a query, not a snapshot: it re-renders as events land, and it never writes to the note.
 
 ````
-```muninn
+```norn
 view: map
 over: week
 ```
@@ -102,7 +98,7 @@ over: week
 | `device` | device names from settings, or raw ids | all |
 | `group` | `session`, `day`, `week`, `month` | one step below `over`: today gives session trees, week gives day trees, month gives week trees, all gives month trees |
 
-A bare block in a daily note shows that day forever. The list view is the day's sessions and files; the map view draws the same forest as the File Map, newest at the top, with drag to pan, ⌘-scroll to zoom, double-click to fit, zoom buttons, a resize handle on the bottom edge (the height is remembered), and a corner button to open the full File Map. The older `contexts` and `contexts-day` block languages still work.
+A bare block in a daily note shows that day forever. The list view is the day's sessions and files; the map view draws the same forest as the File Map, newest at the top, with drag to pan, ⌘-scroll to zoom, double-click to fit, zoom buttons, a resize handle on the bottom edge (the height is remembered), and a corner button to open the full File Map. The older `muninn`, `contexts`, and `contexts-day` block languages still work.
 
 ### The note header chip
 
@@ -145,11 +141,11 @@ Each device writes its own log file. The views merge them into one history and t
 npm install
 npx tsc --noEmit        # typecheck
 npm test                # vitest
-npm run deploy          # build and copy into $MUNINN_VAULT/.obsidian/plugins/muninn
+npm run deploy          # build and copy into $NORN_VAULT/.obsidian/plugins/norn
 ```
 
 `docs/log-format.md` documents the event schema for anyone reading the log files directly.
 
 ## Credits
 
-Raven icon by IconInnovate, from [the Noun Project](https://thenounproject.com/icon/raven-7094362/) (CC BY 3.0).
+Braid icon by Amrita Mayuri, from [the Noun Project](https://thenounproject.com/icon/braid-679417/) (CC BY 3.0).

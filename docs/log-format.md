@@ -1,6 +1,6 @@
 # The log format
 
-One folder in the vault (`Muninn Log/` by default; vaults set up before the rename keep `Contexts Log/`), one file per device per month, named `{deviceId}-{YYYY-MM}.jsonl`. Each line is one JSON event. Files are append-only; the plugin never rewrites a line. Every view is derived from these files at read time, so the shape below is the only persisted state the plugin has.
+One folder in the vault (`Norn Log/` by default; vaults set up before the renames keep `Contexts Log/`), one file per device per month, named `{deviceId}-{YYYY-MM}.jsonl`. Each line is one JSON event. Files are append-only; the plugin never rewrites a line. Every view is derived from these files at read time, so the shape below is the only persisted state the plugin has.
 
 Timestamps (`t`, `start`, `from`, `to`, `covers`, `ctime`) are milliseconds since the epoch. Paths are vault-relative.
 

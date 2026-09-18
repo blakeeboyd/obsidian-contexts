@@ -1,7 +1,7 @@
 {
-  "id": "muninn",
-  "name": "Muninn",
-  "version": "0.1.3",
+  "id": "norn",
+  "name": "Norn",
+  "version": "0.2.0",
   "minAppVersion": "1.4.0",
   "description": "Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
   "author": "Blake Boyd",

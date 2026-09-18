@@ -4,7 +4,7 @@ import type { EditDelta, LogEvent, PeekEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import { BRAID_VIEW_TYPE } from "./braid";
 import { MAP_VIEW_TYPE } from "./map";
-import { MUNINN_ICON } from "./icon";
+import { NORN_ICON } from "./icon";
 import type ContextsPlugin from "./main";
 import {
   ContextSet,
@@ -70,14 +70,14 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   });
 }
 
-/** The full ranked audit of every pair the log knows, via "Muninn: Show all relationships". */
+/** The full ranked audit of every pair the log knows, via "Norn: Show all relationships". */
 export class RelationshipsModal extends Modal {
   constructor(app: App, private plugin: ContextsPlugin, private pairs: PairScore[]) {
     super(app);
   }
 
   onOpen(): void {
-    this.titleEl.setText("Muninn: all relationships");
+    this.titleEl.setText("Norn: all relationships");
     this.renderList();
   }
 
@@ -148,11 +148,11 @@ export class ContextsPane extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Muninn";
+    return "Norn";
   }
 
   getIcon(): string {
-    return MUNINN_ICON;
+    return NORN_ICON;
   }
 
   async onOpen(): Promise<void> {

@@ -1,20 +1,22 @@
 /**
- * The Muninn icon: a raven, for the plugin named after one of Odin's two.
+ * The Norn icon: a braid, three strands in one — the three sisters, the
+ * three tenses of the record (what has come to pass, what is becoming,
+ * what shall be), and the braid the plugin draws.
  *
- * Raven by IconInnovate, from the Noun Project (CC BY 3.0):
- * https://thenounproject.com/icon/raven-7094362/
+ * Braid by Amrita Mayuri, from the Noun Project (CC BY 3.0):
+ * https://thenounproject.com/icon/braid-679417/
  *
  * addIcon takes the inner markup only (no enclosing <svg>) on a 100x100
- * viewBox, which this path already is; fill="currentColor" lets the glyph
- * follow the theme, accent and all, like the built-in Lucide icons.
+ * viewBox, which this already is; fill="currentColor" lets the glyph follow
+ * the theme, accent and all, like the built-in Lucide icons.
  */
 import { addIcon } from "obsidian";
 
-export const MUNINN_ICON = "muninn-raven";
+export const NORN_ICON = "norn-braid";
 
-const RAVEN_PATH = "m85.168 78.75-2.918-11.375v-0.875c0.019531-0.125 0.019531-0.25 0-0.375-0.30469-0.63281-0.71484-1.207-1.207-1.707l-1.875-1.918h-25.836c-7.0195 0-13.754-2.7852-18.723-7.7461-4.9688-4.9609-7.7656-11.691-7.7773-18.711 0-1.6133 1.3086-2.918 2.918-2.918s2.918 1.3047 2.918 2.918c0 5.5234 2.1953 10.824 6.1016 14.73s9.207 6.1016 14.73 6.1016h19.918l-24.586-24.582h9.043c2.1484-0.015625 3.9961-1.5234 4.4492-3.625 0.44922-2.1016-0.62109-4.2305-2.5742-5.125l-17-7.543c-2.1758-3.875-5.9609-6.5781-10.332-7.3867-4.3672-0.80469-8.8711 0.375-12.285 3.2188-3.4102 2.8438-5.3867 7.0586-5.3828 11.5v15.125c0.023438 6.7578 1.9375 13.375 5.5312 19.098 3.5977 5.7227 8.7227 10.324 14.801 13.277l5.707 7.918-3.2891 7.082h-2.457c-1.6133 0-2.918 1.3086-2.918 2.918s1.3047 2.918 2.918 2.918h8.332c1.5859 0.10156 2.957-1.1016 3.0625-2.6875 0.10547-1.5898-1.1016-2.9609-2.6875-3.0625l2.957-6.125c0.45312-0.96484 0.33984-2.1016-0.28906-2.9609l-2-2.832c2.1133 0.39844 4.2617 0.60938 6.4141 0.625h4.168l3.043 4.168-3.375 7h-2.375c-1.6133 0-2.918 1.3047-2.918 2.9141 0 1.6133 1.3047 2.918 2.918 2.918h8.332c1.5859 0.10547 2.957-1.1016 3.0625-2.6875s-1.1016-2.957-2.6875-3.0625l2.957-6.125c0.46484-0.95703 0.36719-2.0898-0.25-2.957l-1.207-2.168h8.332l3.125 6.168c0.51172 0.97266 1.5234 1.5859 2.625 1.582h5.8359c0.89844 0 1.7461-0.41406 2.3008-1.1211 0.55469-0.70703 0.75-1.6328 0.53125-2.5039zm-55.418-58.332c1.2305 0 2.3398 0.73828 2.8086 1.875 0.47266 1.1367 0.21094 2.4453-0.65625 3.3164-0.87109 0.87109-2.1797 1.1289-3.3164 0.66016-1.1367-0.47266-1.8789-1.582-1.8789-2.8125-0.03125-0.82812 0.27344-1.6328 0.84766-2.2305 0.57422-0.59766 1.3672-0.9375 2.1953-0.93359z";
+const BRAID = `<path fill="currentColor" d="m56.395 60.801-36.699 36.699c-2.5352-2.7812-3.9023-6.4297-3.8203-10.191 0.085938-3.7617 1.6133-7.3438 4.2695-10.008l26.402-26.379z"/><path fill="currentColor" d="m68.094 49.078-36.699-36.699 9.8711-9.8789 26.379 26.379c2.6562 2.6641 4.1836 6.25 4.2695 10.012 0.082032 3.7617-1.2852 7.4102-3.8203 10.188z"/><path fill="currentColor" d="m83.234 66.051-9.8789 9.8789-26.379-26.379c-2.6562-2.668-4.1797-6.2539-4.2578-10.016-0.082031-3.7617 1.2891-7.4062 3.8281-10.184z"/>`;
 
-/** Register the icon under MUNINN_ICON. Call before anything references the name. */
-export function registerMuninnIcon(): void {
-  addIcon(MUNINN_ICON, `<path fill="currentColor" d="${RAVEN_PATH}"/>`);
+/** Register the icon under NORN_ICON. Call before anything references the name. */
+export function registerNornIcon(): void {
+  addIcon(NORN_ICON, BRAID);
 }

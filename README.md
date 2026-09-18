@@ -4,7 +4,7 @@ A temporal memory for your Obsidian vault. Contexts records which notes you work
 
 The vault already knows what your notes say. Contexts records what you did with them.
 
-**Status: private beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
+**Status: beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
 
 ## What it records, and where
 
@@ -35,7 +35,7 @@ You control the capture:
 Contexts is distributed through [BRAT](https://github.com/TfTHacker/obsidian42-brat) during the beta.
 
 1. Install and enable BRAT from Community plugins.
-2. In BRAT settings, choose "Add beta plugin" and enter this repository's URL. If the repository is private you will need a GitHub token in BRAT's settings.
+2. In BRAT settings, choose "Add beta plugin" and enter `blakeeboyd/obsidian-contexts`.
 3. Enable Contexts in Community plugins.
 
 To use it on more than one device, turn on **Sync all other types** in Obsidian Sync's settings on every device. Without it the `.jsonl` log files stay on the device that wrote them.

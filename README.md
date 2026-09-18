@@ -140,4 +140,4 @@ npm test                # vitest
 npm run deploy          # build and copy into $CONTEXTS_VAULT/.obsidian/plugins/obsidian-contexts
 ```
 
-Design records live in `docs/`: `plan.md` (the design as it stands), `open-items.md` (the pickup document for the next session), `relationship-layer.md` (the planned layer for asserting relationships between notes), `log-format.md` (the event schema), `provenance.md` (where each feature's idea came from), and `testing.md` (the capture-path smoke test, required after changes to event wiring).
+`docs/log-format.md` documents the event schema for anyone reading the log files directly.

@@ -2,3 +2,7 @@ node_modules/
 main.js
 *.js.map
 data.json
+
+# Private working docs: kept on disk, moving to the vault later; only log-format.md is public.
+docs/*
+!docs/log-format.md

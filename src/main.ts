@@ -64,6 +64,9 @@ import {
   unrelatedPairs,
 } from "./views";
 
+// The braid view is parked for the beta; the map covers its ground for now.
+const BRAID_ENABLED = false;
+
 // A modify event on a path this soon after its span closed is the editor's
 // trailing autosave, not an external edit.
 const RECENT_DEACT_GRACE_MS = 3000;
@@ -195,11 +198,16 @@ export default class ContextsPlugin extends Plugin {
       name: "Open pane",
       callback: () => void this.activatePane(),
     });
-    this.addCommand({
-      id: "open-braid",
-      name: "Open braid",
-      callback: () => void this.activateBraid(),
-    });
+    // The braid is parked for the beta (Blake, 2026-09-17): the view stays
+    // registered so a saved layout holding one still opens, but it has no
+    // entry point. Flip to bring it back.
+    if (BRAID_ENABLED) {
+      this.addCommand({
+        id: "open-braid",
+        name: "Open braid",
+        callback: () => void this.activateBraid(),
+      });
+    }
     this.addCommand({
       id: "open-map",
       name: "Open file map",

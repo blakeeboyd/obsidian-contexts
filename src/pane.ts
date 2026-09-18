@@ -205,8 +205,8 @@ export class ContextsPane extends ItemView {
       // declaration is a visible act, and the veil is for not acting visibly.
       ctxLine.addClass("is-veiled");
       setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
-      ctxLine.createSpan({ text: "Veiled: recording continues, nothing shows" });
-      ctxLine.setAttribute("title", "Lift the veil to switch context");
+      ctxLine.createSpan({ text: "Veiled" });
+      ctxLine.setAttribute("title", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views.");
     } else {
       setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
       ctxLine.createSpan({

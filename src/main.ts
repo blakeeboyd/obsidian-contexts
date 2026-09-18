@@ -907,7 +907,7 @@ export default class ContextsPlugin extends Plugin {
           bar.addClass("is-veiled");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
           bar.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
-          bar.setAttribute("aria-label", "Veiled: recording continues, nothing shows. Lift the veil to switch context.");
+          bar.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views.");
         } else if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
@@ -930,7 +930,7 @@ export default class ContextsPlugin extends Plugin {
         if (this.settings.veil) veilBtn.addClass("is-active");
         veilBtn.setAttribute(
           "aria-label",
-          this.settings.veil ? "Veiled: recording continues, nothing shows. Click to lift." : "Veil: keep recording, show nothing"
+          this.settings.veil ? "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil." : "Veil: record but show nothing"
         );
         veilBtn.addEventListener("click", () => this.setVeil(!this.settings.veil));
         bar.insertAdjacentElement("afterend", veilBtn);

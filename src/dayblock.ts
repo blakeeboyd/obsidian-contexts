@@ -235,8 +235,9 @@ export class ContextsBlock extends MarkdownRenderChild {
     const gapMs = s.sessionGapMin * 60_000;
     const scope: { from?: number; to?: number; ctx?: Set<string> } = { from: win.from, to: win.to };
     if (ctxSet) scope.ctx = ctxSet;
-    // Chronological top-down: an embedded block reads like the note around it.
+    // Newest first, like the File Map: the top of the block is now.
     const trees = buildNavForest(relEvents, scope, gapMs, grain);
+    trees.reverse();
     if (!trees.length) {
       el.createDiv({ text: "Nothing recorded here.", cls: "contexts-empty" });
       return;
@@ -401,7 +402,8 @@ export class ContextsBlock extends MarkdownRenderChild {
 
     // Windows longer than a day date their session headers.
     const multiDay = win.from === undefined || win.to === undefined || win.to - win.from > DAY_MS;
-    for (const sess of sessions) {
+    // Newest session first: the top of the block is now.
+    for (const sess of [...sessions].reverse()) {
       const engaged = sess.spans.reduce((sum, sp) => sum + sp.dur, 0);
       const open = this.openSessions.has(sess.start);
       const header = el.createDiv({ cls: "contexts-section contexts-expandable contexts-session-header" });

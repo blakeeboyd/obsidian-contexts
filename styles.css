@@ -374,14 +374,42 @@
   font-size: 12px;
 }
 
-/* Native vertical resize: the browser draws a drag grip in the wrap's
-   bottom-right corner; the svg fills whatever height the user chooses. */
+/* The block map: width always fills the note; height is the drawing's
+   aspect ratio or the user's dragged height (bottom-edge grip). */
 .contexts-block-map {
   position: relative;
-  resize: vertical;
+  width: 100%;
   overflow: hidden;
   min-height: 120px;
   max-height: 85vh;
+}
+
+.contexts-block-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 7px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.contexts-block-grip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 36px;
+  height: 3px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: var(--background-modifier-border);
+  opacity: 0.7;
+}
+
+.contexts-block-grip:hover::after {
+  background: var(--text-muted);
+  opacity: 1;
 }
 
 .contexts-block-map-svg {
@@ -392,8 +420,8 @@
 
 .contexts-block-open {
   position: absolute;
-  bottom: 4px;
-  right: 20px; /* the native resize grip owns the very corner */
+  bottom: 8px;
+  right: 6px;
   opacity: 0.5;
   cursor: pointer;
   color: var(--text-muted);
@@ -411,7 +439,7 @@
 
 .contexts-block-zoom {
   position: absolute;
-  bottom: 4px;
+  bottom: 8px;
   left: 4px;
   display: flex;
   gap: 2px;
@@ -444,8 +472,8 @@
 
 .contexts-block-hint {
   position: absolute;
-  bottom: 7px;
-  right: 44px;
+  bottom: 10px;
+  right: 30px;
   font-size: 10px;
   color: var(--text-faint);
   pointer-events: none;
@@ -506,8 +534,9 @@
   font-style: italic;
 }
 
-.contexts-header-ctx.is-incognito {
+.contexts-header-veil.is-active {
   color: var(--color-purple, var(--text-accent));
+  background: var(--background-modifier-hover);
 }
 
 .contexts-header-ctx .contexts-chip-icon svg {

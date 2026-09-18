@@ -245,22 +245,12 @@ export class ContextsBlock extends MarkdownRenderChild {
       return;
     }
     const wrap = el.createDiv({ cls: "contexts-block-map" });
-    // Native CSS resize gives the wrap a drag grip (bottom-right corner);
-    // the svg fills it. Default height comes from the drawing's aspect
-    // ratio; a user-dragged height is remembered per block instance, so
-    // live re-renders don't snap the box back.
+    // Height: the drawing's aspect ratio by default, or the user's dragged
+    // height (remembered per block in settings, restored here). Width always
+    // fills the note; only the vertical is negotiable.
     const heightKey = `${this.sourcePath}::${this.source.trim()}`;
     this.mapHeight ??= this.plugin.settings.blockHeights[heightKey] ?? null;
     if (this.mapHeight) wrap.style.height = `${this.mapHeight}px`;
-    wrap.addEventListener("pointerup", () => {
-      // The native resize drag is the only thing that sets an inline height
-      // (besides our own restore), so its presence means "user-chosen".
-      const h = parseInt(wrap.style.height);
-      if (!h || h === this.mapHeight) return;
-      this.mapHeight = h;
-      this.plugin.settings.blockHeights[heightKey] = h;
-      void this.plugin.saveSettings();
-    });
     const svg = wrap.createSvg("svg", { cls: ["contexts-map-svg", "contexts-block-map-svg"] });
     const drawing = drawForest({
       svg,
@@ -370,10 +360,44 @@ export class ContextsBlock extends MarkdownRenderChild {
       vb = { ...fit };
       apply();
     });
+    // The resize handle: a strip along the bottom edge, vertical only. Own
+    // drag code instead of CSS resize, which let the width shrink, never
+    // delivered its drag-end to us (so nothing saved), and has no grip on
+    // iOS. Saves quietly on release — no view needs to re-render for it.
+    const grip = wrap.createDiv({ cls: "contexts-block-grip" });
+    grip.setAttribute("aria-label", "Drag to resize");
+    grip.addEventListener("mousedown", (evt) => evt.stopPropagation());
+    grip.addEventListener("pointerdown", (evt: PointerEvent) => {
+      if (evt.button !== 0) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      touched();
+      const startY = evt.clientY;
+      const startH = wrap.offsetHeight;
+      grip.setPointerCapture(evt.pointerId);
+      const move = (mv: PointerEvent) => {
+        const h = Math.round(Math.max(120, Math.min(window.innerHeight * 0.85, startH + mv.clientY - startY)));
+        wrap.style.aspectRatio = "";
+        wrap.style.height = `${h}px`;
+      };
+      const up = () => {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+        const h = wrap.offsetHeight;
+        if (h === this.mapHeight) return;
+        this.mapHeight = h;
+        this.plugin.settings.blockHeights[heightKey] = h;
+        void this.plugin.saveSettingsQuiet();
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
     if (!this.mapTouched) {
       hint = wrap.createDiv({
         cls: "contexts-block-hint",
-        text: "drag to pan · ⌘-scroll to zoom · double-click to fit · drag the corner to resize",
+        text: "drag to pan · ⌘-scroll to zoom · double-click to fit · drag the bottom edge to resize",
       });
     }
     // Bottom-right, away from Live Preview's own edit-block pencil at the

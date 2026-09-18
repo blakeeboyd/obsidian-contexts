@@ -386,9 +386,9 @@ export default class ContextsPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "toggle-incognito",
-      name: "Toggle incognito (record but show nothing)",
-      callback: () => this.setIncognito(!this.settings.incognito),
+      id: "toggle-veil",
+      name: "Toggle the veil (record but show nothing)",
+      callback: () => this.setVeil(!this.settings.veil),
     });
   }
 
@@ -722,7 +722,7 @@ export default class ContextsPlugin extends Plugin {
   onunload() {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.barsToken++; // cancel any in-flight bar rebuild
-    for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx"))) el.remove();
+    for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx, .contexts-header-veil"))) el.remove();
     // Fire-and-forget: usually completes before the process is gone, and the
     // reader survives a truncated final line if it doesn't.
     this.enqueue(() => this.closeSpan(undefined, "quit"));
@@ -733,6 +733,11 @@ export default class ContextsPlugin extends Plugin {
     this.refreshPane();
   }
 
+  /** Persist without re-rendering: for UI state (block heights) no view needs to react to. */
+  async saveSettingsQuiet() {
+    await this.saveData(this.settings);
+  }
+
   /** The full event history (all devices' shards), loaded once and kept current in memory. */
   async getEvents(): Promise<LogEvent[]> {
     if (!this.events) this.events = await this.log.readAll();
@@ -740,13 +745,13 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async record(ev: LogEvent): Promise<void> {
-    // Incognito stamps only behavioral events (visits, peeks, creates,
+    // The veil stamps only behavioral events (visits, peeks, creates,
     // notes); structural events must stay visible or the views' plumbing
     // (renames, baselines, declarations) breaks. Spans stamp at CLOSE time,
-    // and setIncognito flushes the open span at each toggle, so no span
+    // and setVeil flushes the open span at each toggle, so no span
     // straddles the boundary.
-    if (this.settings.incognito && (isSpan(ev) || ev.type === "peek" || ev.type === "create" || ev.type === "note")) {
-      ev.incognito = true;
+    if (this.settings.veil && (isSpan(ev) || ev.type === "peek" || ev.type === "create" || ev.type === "note")) {
+      ev.veiled = true;
     }
     // Tag the in-memory copy so live events match read-tagged ones; append's
     // serializer strips the field (the shard filename is the persisted truth).
@@ -757,19 +762,19 @@ export default class ContextsPlugin extends Plugin {
   }
 
   /**
-   * Incognito: keep recording, show nothing. The boundary is flushed crisp —
+   * The veil: keep recording, show nothing. The boundary is flushed crisp —
    * the open span closes under the OLD state before the flip, so a sitting
    * never straddles the veil.
    */
-  setIncognito(v: boolean): void {
-    if (this.settings.incognito === v) return;
+  setVeil(v: boolean): void {
+    if (this.settings.veil === v) return;
     this.enqueue(async () => {
       await this.closeSpan();
-      this.settings.incognito = v;
+      this.settings.veil = v;
       await this.saveSettings(); // refreshPane rides along: views + chip update
       await this.onActiveChange();
     });
-    new Notice(v ? "Contexts: incognito — recording continues, nothing will show" : "Contexts: incognito off");
+    new Notice(v ? "Contexts: veiled — recording continues, nothing will show" : "Contexts: veil lifted");
   }
 
   /** A device's display name (settings), falling back to its id. */
@@ -874,7 +879,7 @@ export default class ContextsPlugin extends Plugin {
         if (ctx) sigil = allSigils(relEvents).get(ctx);
       }
       if (token !== this.barsToken) return; // a newer rebuild superseded this one
-      for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx"))) el.remove();
+      for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx, .contexts-header-veil"))) el.remove();
       if (!show) return;
       for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
         // Into the view header's action row, first child = leftmost action,
@@ -887,14 +892,7 @@ export default class ContextsPlugin extends Plugin {
         // the current declaration covers it.
         const path = (leaf.view as MarkdownView).file?.path;
         const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
-        // Incognito outranks everything on the chip: while hidden, KNOWING
-        // you're hidden is the feedback that matters.
-        if (this.settings.incognito) {
-          bar.addClass("is-incognito");
-          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
-          bar.createSpan({ text: "Incognito", cls: "contexts-header-ctx-name" });
-          bar.setAttribute("aria-label", "Incognito: recording continues, nothing shows. Click to switch context anyway.");
-        } else if (excludedBy) {
+        if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
           bar.createSpan({ text: "Excluded", cls: "contexts-header-ctx-name" });
@@ -909,6 +907,17 @@ export default class ContextsPlugin extends Plugin {
         }
         bar.addEventListener("click", () => void this.openContextModal());
         actions.insertAdjacentElement("afterbegin", bar);
+        // The veil button, beside the chip: one control, one fact. Lit while
+        // veiled — when you're hidden, knowing you're hidden is the feedback.
+        const veilBtn = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-veil"] });
+        setIcon(veilBtn, "venetian-mask");
+        if (this.settings.veil) veilBtn.addClass("is-active");
+        veilBtn.setAttribute(
+          "aria-label",
+          this.settings.veil ? "Veiled: recording continues, nothing shows. Click to lift." : "Veil: keep recording, show nothing"
+        );
+        veilBtn.addEventListener("click", () => this.setVeil(!this.settings.veil));
+        bar.insertAdjacentElement("afterend", veilBtn);
       }
     })();
   }

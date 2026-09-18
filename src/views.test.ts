@@ -514,14 +514,14 @@ describe("relabeledDecls", () => {
   });
 });
 
-describe("incognito", () => {
+describe("the veil", () => {
   it("stamped events vanish from every view at the shared read gate; structural events stay", () => {
-    const hidden: LogEvent = { ...span("Secret.md", MIN), incognito: true };
+    const hidden: LogEvent = { ...span("Secret.md", MIN), veiled: true };
     const events: LogEvent[] = [
       { t: 0, type: "context", name: "open work" },
       span("Public.md", MIN),
       hidden,
-      { t: 10 * MIN, type: "peek", path: "Peeked.md", from: "Secret.md", incognito: true },
+      { t: 10 * MIN, type: "peek", path: "Peeked.md", from: "Secret.md", veiled: true },
       { t: 11 * MIN, type: "relabel", from: "open work", to: "grant" },
     ];
     const visible = applyErasures(events);

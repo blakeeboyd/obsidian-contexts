@@ -548,14 +548,14 @@ export interface EraseEvent {
 export type DeviceTag = { device?: string };
 
 /**
- * Written while incognito mode was on: recorded like everything else (the
+ * Written while the veil was on: recorded like everything else (the
  * log is irreplaceable memory), but dropped from every derived view at read
  * time. Only behavioral events are stamped (visits, peeks, creates, notes);
  * structural events (renames, declarations, baselines) stay visible or the
- * views' plumbing would break. A future "show incognito" lens is a one-line
+ * views' plumbing would break. A future "lift the veil" lens is a one-line
  * change to the read-time gate.
  */
-export type Veiled = { incognito?: true };
+export type Veiled = { veiled?: true };
 
 export type LogEvent = DeviceTag &
   Veiled &

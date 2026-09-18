@@ -269,6 +269,16 @@
   cursor: pointer;
 }
 
+.contexts-sigil-clear {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.contexts-clear-name {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
 .contexts-sigil-choice.is-current {
   box-shadow: 0 0 0 2px var(--interactive-accent);
 }

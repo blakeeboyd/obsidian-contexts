@@ -196,7 +196,8 @@ export default class ContextsPlugin extends Plugin {
       },
       { capture: true }
     );
-    this.addRibbonIcon("footprints", "Open Contexts pane", () => void this.activatePane());
+    this.addRibbonIcon("footprints", "Open Muninn pane", () => void this.activatePane());
+    this.addRibbonIcon("waypoints", "Open file map", () => void this.activateFullView(MAP_VIEW_TYPE));
     this.addCommand({
       id: "open-pane",
       name: "Open pane",
@@ -617,7 +618,14 @@ export default class ContextsPlugin extends Plugin {
       pinned: pinnedSigils(events).get(name) ?? "",
       recent: recentSigils(events),
       onPick: (s) => this.setSigil(name, s),
+      onClearName: ANON_CONTEXT_RE.test(name) ? undefined : () => void this.clearContextName(name),
     }).open();
+  }
+
+  /** Un-name a context: relabel it to the next free anonymous "context N", so the derived label takes over again. */
+  async clearContextName(name: string): Promise<void> {
+    const names = contextNames(excludeFolders(await this.getEvents(), this.settings.excludedFolders));
+    this.relabelContext(name, `context ${nextContextIndex(names)}`);
   }
 
   /** Merge one context into another: a relabel onto an existing name, which the identity pass merges. */
@@ -1452,7 +1460,7 @@ export class NameModal extends Modal {
     private title: string,
     private initial: string,
     private onSubmit: (value: string) => void,
-    private sigil?: { value: string; pinned: string; recent: string[]; onPick: (s: string) => void }
+    private sigil?: { value: string; pinned: string; recent: string[]; onPick: (s: string) => void; onClearName?: () => void }
   ) {
     super(app);
   }
@@ -1477,7 +1485,7 @@ export class NameModal extends Modal {
       if (this.sigil && sigilInput) {
         const s = sigilInput.value.trim();
         // Adopting the placeholder pins it too; unchanged-from-pinned is a no-op.
-        if (touched && s && s !== this.sigil.pinned) this.sigil.onPick(s);
+        if (touched && s !== this.sigil.pinned) this.sigil.onPick(s); // "" unpins: back to the placeholder
       }
       this.onSubmit(input.value);
     };
@@ -1497,6 +1505,23 @@ export class NameModal extends Modal {
           grid.querySelector(".is-current")?.removeClass("is-current");
           b.addClass("is-current");
           input.focus();
+        });
+      }
+      // Clear: unpin the sigil, back to a starter placeholder.
+      const clearSigil = grid.createEl("button", { text: "clear", cls: ["contexts-sigil-choice", "contexts-sigil-clear"] });
+      clearSigil.setAttribute("aria-label", "Clear the sigil (back to a placeholder)");
+      clearSigil.addEventListener("click", () => {
+        sigilInput!.value = "";
+        touched = true;
+        grid.querySelector(".is-current")?.removeClass("is-current");
+        input.focus();
+      });
+      if (this.sigil.onClearName) {
+        // Clear name: back to anonymous, with a live derived label.
+        const clearName = this.contentEl.createEl("button", { text: "Clear name (make anonymous)", cls: "contexts-clear-name" });
+        clearName.addEventListener("click", () => {
+          this.close();
+          this.sigil!.onClearName!();
         });
       }
     }

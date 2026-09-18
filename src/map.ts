@@ -6,6 +6,7 @@ import { PALETTE, UNASSIGNED_COLOR } from "./braid";
 import { fmtClock, fmtDur, relDay } from "./format";
 import { HoverTip } from "./tip";
 import {
+  ANON_CONTEXT_RE,
   NAV_H_GAP,
   NAV_ROW_H,
   NavGroup,
@@ -574,6 +575,9 @@ export class MapView extends ItemView {
           const menu = new Menu();
           menu.addItem((i) => i.setTitle("Declare (work here now)").setIcon("compass").onClick(() => this.plugin.declareContext(name)));
           menu.addItem((i) => i.setTitle("Rename / set sigil…").setIcon("pencil").onClick(() => void this.plugin.openRenameFor(name)));
+          if (!ANON_CONTEXT_RE.test(name)) {
+            menu.addItem((i) => i.setTitle("Clear name (make anonymous)").setIcon("eraser").onClick(() => void this.plugin.clearContextName(name)));
+          }
           menu.addItem((i) => i.setTitle("Merge into…").setIcon("merge").onClick(() => void this.plugin.openMergeModal(name)));
           menu.showAtMouseEvent(evt);
         });

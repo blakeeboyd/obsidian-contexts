@@ -1,9 +1,9 @@
 {
-  "id": "obsidian-contexts",
-  "name": "Contexts",
-  "version": "0.1.0",
+  "id": "muninn",
+  "name": "Muninn",
+  "version": "0.1.1",
   "minAppVersion": "1.4.0",
-  "description": "A temporal memory for your vault: records which notes you work in, when, what changed, and what was open alongside.",
+  "description": "Episodic memory for your vault: records which notes you work in, when, what changed, and what was open alongside, and hands it back as a trail, a map, and threads of work.",
   "author": "Blake Boyd",
   "isDesktopOnly": false
 }

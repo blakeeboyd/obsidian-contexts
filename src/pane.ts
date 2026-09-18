@@ -69,14 +69,14 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   });
 }
 
-/** The full ranked audit of every pair the log knows, via "Contexts: Show all relationships". */
+/** The full ranked audit of every pair the log knows, via "Muninn: Show all relationships". */
 export class RelationshipsModal extends Modal {
   constructor(app: App, private plugin: ContextsPlugin, private pairs: PairScore[]) {
     super(app);
   }
 
   onOpen(): void {
-    this.titleEl.setText("Contexts: all relationships");
+    this.titleEl.setText("Muninn: all relationships");
     this.renderList();
   }
 
@@ -147,7 +147,7 @@ export class ContextsPane extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Contexts";
+    return "Muninn";
   }
 
   getIcon(): string {

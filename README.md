@@ -1,14 +1,20 @@
-# Contexts
+# Muninn
 
-A temporal memory for your Obsidian vault. Contexts records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
+**Episodic memory for your vault.**
 
-The vault already knows what your notes say. Contexts records what you did with them.
+Muninn records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
+
+The vault already knows what your notes say. Muninn records what you did with them.
+
+> Huginn and Muninn fly each day over the wide world. I fear for Huginn, that he may not come back; yet more anxious am I for Muninn.
+>
+> Odin, in the *Grímnismál*. Huginn is thought; Muninn is memory.
 
 **Status: beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
 
 ## What it records, and where
 
-Everything goes into one folder in your vault, `Contexts Log/` by default, as plain JSONL text files: one file per device per month (for example `850nr6-2026-09.jsonl`). The log is append-only. Every view in the plugin is computed from it at read time, so nothing else is stored, and deleting the folder deletes the record.
+Everything goes into one folder in your vault, `Muninn Log/` by default, as plain JSONL text files: one file per device per month (for example `850nr6-2026-09.jsonl`). The log is append-only. Every view in the plugin is computed from it at read time, so nothing else is stored, and deleting the folder deletes the record.
 
 What lands in the log:
 
@@ -32,11 +38,11 @@ You control the capture:
 
 ## Install
 
-Contexts is distributed through [BRAT](https://github.com/TfTHacker/obsidian42-brat) during the beta.
+Muninn is distributed through [BRAT](https://github.com/TfTHacker/obsidian42-brat) during the beta.
 
 1. Install and enable BRAT from Community plugins.
-2. In BRAT settings, choose "Add beta plugin" and enter `blakeeboyd/obsidian-contexts`.
-3. Enable Contexts in Community plugins.
+2. In BRAT settings, choose "Add beta plugin" and enter `blakeeboyd/obsidian-muninn`.
+3. Enable Muninn in Community plugins.
 
 To use it on more than one device, turn on **Sync all other types** in Obsidian Sync's settings on every device. Without it the `.jsonl` log files stay on the device that wrote them.
 
@@ -75,12 +81,12 @@ The **rail** lists every context as a row: sigil, color, name, a compass on the 
 
 Click a node for its detail panel: memberships, stats, and every tie to other nodes. ⌘-click opens the note.
 
-### The `contexts` code block
+### The `muninn` code block
 
 Embed a live view in any note. The block is a query, not a snapshot: it re-renders as events land, and it never writes to the note.
 
 ````
-```contexts
+```muninn
 view: map
 over: week
 ```
@@ -94,7 +100,7 @@ over: week
 | `device` | device names from settings, or raw ids | all |
 | `group` | `session`, `day`, `week`, `month` | one step below `over`: today gives session trees, week gives day trees, month gives week trees, all gives month trees |
 
-A bare block in a daily note shows that day forever. The list view is the day's sessions and files; the map view draws the same forest as the File Map, newest at the top, with drag to pan, ⌘-scroll to zoom, double-click to fit, zoom buttons, a resize handle on the bottom edge (the height is remembered), and a corner button to open the full File Map. The older `contexts-day` language still works.
+A bare block in a daily note shows that day forever. The list view is the day's sessions and files; the map view draws the same forest as the File Map, newest at the top, with drag to pan, ⌘-scroll to zoom, double-click to fit, zoom buttons, a resize handle on the bottom edge (the height is remembered), and a corner button to open the full File Map. The older `contexts` and `contexts-day` block languages still work.
 
 ### The note header chip
 
@@ -137,7 +143,7 @@ Each device writes its own log file. The views merge them into one history and t
 npm install
 npx tsc --noEmit        # typecheck
 npm test                # vitest
-npm run deploy          # build and copy into $CONTEXTS_VAULT/.obsidian/plugins/obsidian-contexts
+npm run deploy          # build and copy into $MUNINN_VAULT/.obsidian/plugins/muninn
 ```
 
 `docs/log-format.md` documents the event schema for anyone reading the log files directly.

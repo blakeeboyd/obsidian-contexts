@@ -1,12 +1,12 @@
 {
-  "name": "obsidian-contexts",
+  "name": "obsidian-muninn",
   "version": "0.1.0",
   "description": "A temporal memory for your vault",
   "main": "main.js",
   "scripts": {
-    "dev": "CONTEXTS_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs",
+    "dev": "MUNINN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
-    "deploy": "CONTEXTS_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs production",
+    "deploy": "MUNINN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs production",
     "test": "vitest run"
   },
   "keywords": [],

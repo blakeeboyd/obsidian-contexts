@@ -128,9 +128,10 @@ export default class ContextsPlugin extends Plugin {
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerView(BRAID_VIEW_TYPE, (leaf) => new BraidView(leaf, this));
     this.registerView(MAP_VIEW_TYPE, (leaf) => new MapView(leaf, this));
-    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Contexts", defaultMod: true });
-    // One language, two spellings: `contexts` is the block; `contexts-day` stays a working alias.
-    for (const lang of ["contexts", "contexts-day"]) {
+    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Muninn", defaultMod: true });
+    // One block, three spellings: `muninn` is the block; `contexts` and
+    // `contexts-day` stay working aliases from before the rename.
+    for (const lang of ["muninn", "contexts", "contexts-day"]) {
       this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
         ctx.addChild(new ContextsBlock(this, el, source, ctx.sourcePath));
       });
@@ -142,13 +143,16 @@ export default class ContextsPlugin extends Plugin {
     const ws = this.app.workspace as unknown as {
       on(name: string, cb: (path: string, writer: string) => void): EventRef;
     };
-    this.registerEvent(
-      ws.on("contexts:plugin-write", (path, writer) => {
-        if (typeof path === "string" && typeof writer === "string" && writer) {
-          this.pendingPluginWrite.set(path, { writer, t: Date.now() });
-        }
-      })
-    );
+    // Both spellings honored: "muninn:plugin-write" and the pre-rename name.
+    for (const evName of ["muninn:plugin-write", "contexts:plugin-write"]) {
+      this.registerEvent(
+        ws.on(evName, (path, writer) => {
+          if (typeof path === "string" && typeof writer === "string" && writer) {
+            this.pendingPluginWrite.set(path, { writer, t: Date.now() });
+          }
+        })
+      );
+    }
 
     // A hover preview is a link followed with the eyes: log the peek,
     // keyed to the previewed file with the source as its from.
@@ -337,7 +341,7 @@ export default class ContextsPlugin extends Plugin {
           const events = await this.getEvents();
           const names = contextNames(events);
           if (!names.length) {
-            new Notice("Contexts: no contexts to rename yet.");
+            new Notice("Muninn: no contexts to rename yet.");
             return;
           }
           new RenameContextModal(this.app, this, names, contextFileSets(events), allSigils(events)).open();
@@ -394,7 +398,7 @@ export default class ContextsPlugin extends Plugin {
       name: "Pause/resume recording",
       callback: () => {
         this.setPaused(!this.settings.paused);
-        new Notice(`Contexts: recording ${this.settings.paused ? "paused" : "resumed"}`);
+        new Notice(`Muninn: recording ${this.settings.paused ? "paused" : "resumed"}`);
       },
     });
 
@@ -574,13 +578,13 @@ export default class ContextsPlugin extends Plugin {
   async openEvictModal(): Promise<void> {
     const path = this.lastActiveMdPath;
     if (!path) {
-      new Notice("Contexts: open a file first.");
+      new Notice("Muninn: open a file first.");
       return;
     }
     const relEvents = excludeFolders(applyErasures(applyRenames(healRenames(await this.getEvents()))), this.settings.excludedFolders);
     const threads = fileContexts(relEvents, path);
     if (!threads.length) {
-      new Notice("Contexts: this file belongs to no context.");
+      new Notice("Muninn: this file belongs to no context.");
       return;
     }
     new EvictModal(this.app, this, path, threads.map((t) => t.name)).open();
@@ -621,7 +625,7 @@ export default class ContextsPlugin extends Plugin {
     const events = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
     const names = contextNames(events).filter((n) => n !== from);
     if (!names.length) {
-      new Notice("Contexts: no other context to merge into.");
+      new Notice("Muninn: no other context to merge into.");
       return;
     }
     new PickContextModal(this.app, names, `Merge "${from}" into…`, (to) => this.relabelContext(from, to)).open();
@@ -635,7 +639,7 @@ export default class ContextsPlugin extends Plugin {
 
   async openContextModal(): Promise<void> {
     if (this.settings.veil) {
-      new Notice("Contexts: veiled — lift the veil to switch context.");
+      new Notice("Muninn: veiled — lift the veil to switch context.");
       return;
     }
     // Excluded files can't belong to contexts, so the faces skip them.
@@ -795,7 +799,7 @@ export default class ContextsPlugin extends Plugin {
     // only earns its place where it isn't.
     const mode = this.settings.contextBar;
     const barShowing = mode === "always" || (mode === "mobile" && Platform.isMobile);
-    if (!barShowing) new Notice(v ? "Contexts: veiled — recording continues, nothing will show" : "Contexts: veil lifted");
+    if (!barShowing) new Notice(v ? "Muninn: veiled — recording continues, nothing will show" : "Muninn: veil lifted");
   }
 
   /** A device's display name (settings), falling back to its id. */
@@ -823,7 +827,7 @@ export default class ContextsPlugin extends Plugin {
     await this.saveSettings();
     this.log = new EventLog(this.app.vault.adapter, folder, getDeviceId());
     this.events = null; // re-read from the new location on next use
-    new Notice(`Contexts: log moved to ${folder}`);
+    new Notice(`Muninn: log moved to ${folder}`);
   }
 
   private dayBlocks = new Set<ContextsBlock>();
@@ -949,7 +953,7 @@ export default class ContextsPlugin extends Plugin {
   private async insertDaySummary(): Promise<void> {
     const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) {
-      new Notice("Contexts: open the note to insert into first.");
+      new Notice("Muninn: open the note to insert into first.");
       return;
     }
     const iso = file.basename.match(/\d{4}-\d{2}-\d{2}/)?.[0];
@@ -958,7 +962,7 @@ export default class ContextsPlugin extends Plugin {
     const events = applyErasures(applyRenames(healRenames(await this.getEvents())));
     const body = dailyMarkdown(events, dayStart, dayStart + 24 * 3600_000, this.settings.sessionGapMin * 60_000);
     await this.app.vault.process(file, (content) => upsertDaySection(content, body));
-    new Notice("Contexts: day summary inserted.");
+    new Notice("Muninn: day summary inserted.");
   }
 
   private async activatePane(): Promise<void> {
@@ -996,11 +1000,11 @@ export default class ContextsPlugin extends Plugin {
       for (const c of claims) await this.record({ t, type: "context", name: c.name, covers: c.covers });
       if (claims[claims.length - 1].name !== prev) await this.record({ t, type: "context", name: prev });
     });
-    new Notice("Contexts: boundary moved");
+    new Notice("Muninn: boundary moved");
   }
 
   private enqueue(op: () => Promise<void>): void {
-    this.queue = this.queue.then(op).catch((e) => console.error("Contexts:", e));
+    this.queue = this.queue.then(op).catch((e) => console.error("Muninn:", e));
   }
 
   private bumpActivity(): void {
@@ -1057,7 +1061,7 @@ export default class ContextsPlugin extends Plugin {
             if (removed.length) ev.edit.linksRemoved = removed;
           }
         } catch (e) {
-          console.error("Contexts: extmod link diff failed", e);
+          console.error("Muninn: extmod link diff failed", e);
         }
       }
       await this.record(ev);
@@ -1535,7 +1539,7 @@ class HistoryModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("Contexts: recent history");
+    this.titleEl.setText("Muninn: recent history");
     this.contentEl.createEl("pre", { text: this.text, cls: "contexts-history" });
   }
 

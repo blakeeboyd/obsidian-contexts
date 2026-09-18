@@ -210,7 +210,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
-  logFolder: "Contexts Log",
+  logFolder: "Muninn Log",
   contextBar: "mobile",
   blockHeights: {},
 };

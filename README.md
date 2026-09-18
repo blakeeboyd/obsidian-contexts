@@ -10,6 +10,8 @@ The vault already knows what your notes say. Muninn records what you did with th
 >
 > Odin, in the *Grímnismál*. Huginn is thought; Muninn is memory.
 
+Say it *MOO-nin* (rhymes with "moon in"). Huginn, the other raven, is *HOO-gin* with a hard g. Both are Old Norse, and both spellings drift; the double n is the one on the manifest.
+
 **Status: beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
 
 ## What it records, and where

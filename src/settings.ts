@@ -152,6 +152,9 @@ export interface ContextsSettings {
   // The veil: keep recording (the log is irreplaceable memory) but stamp
   // behavioral events so every view hides them at read time.
   veil: boolean;
+  // When the veil lifts on its own: never (keep), when the sitting ends
+  // (idle or restart), or only on restart.
+  veilLifts: "keep" | "session" | "reload";
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
   // Bridge files (daily notes, inboxes): they inherit every context they're
   // visited under, but opening one never pulls the declaration — they
@@ -203,6 +206,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   trailDetailNewestFirst: true,
   paused: false,
   veil: false,
+  veilLifts: "keep",
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
@@ -258,6 +262,21 @@ export class ContextsSettingTab extends PluginSettingTab {
         "Keep recording, but hide these visits from every view — the map, the trail, the history, all of it. The log underneath stays complete; nothing shows until turned off, and what was hidden stays hidden."
       )
       .addToggle((t) => t.setValue(this.plugin.settings.veil).onChange((v) => this.plugin.setVeil(v)));
+
+    new Setting(containerEl)
+      .setName("The veil lifts")
+      .setDesc("Whether the veil stays on until you lift it, or lifts by itself when the sitting ends.")
+      .addDropdown((d) =>
+        d
+          .addOption("keep", "Only when I lift it")
+          .addOption("session", "When the session ends (idle or restart)")
+          .addOption("reload", "When Obsidian restarts")
+          .setValue(this.plugin.settings.veilLifts)
+          .onChange(async (v) => {
+            this.plugin.settings.veilLifts = v as ContextsSettings["veilLifts"];
+            await this.plugin.saveSettings();
+          })
+      );
 
     new Setting(containerEl)
       .setName("Log folder")

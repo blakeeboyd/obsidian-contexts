@@ -536,11 +536,6 @@
 
 .contexts-context.is-veiled {
   color: var(--color-purple, var(--text-accent));
-  cursor: default;
-}
-
-.contexts-context.is-veiled:hover {
-  background: none;
 }
 
 .contexts-header-ctx.is-veiled {
@@ -548,9 +543,10 @@
   cursor: default;
 }
 
-.contexts-header-veil.is-active {
+.contexts-header-ctx.is-veiled {
   color: var(--color-purple, var(--text-accent));
   background: var(--background-modifier-hover);
+  border-radius: var(--radius-s);
 }
 
 .contexts-header-ctx .contexts-chip-icon svg {

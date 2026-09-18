@@ -107,6 +107,11 @@ export default class ContextsPlugin extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.capture = Object.assign({}, DEFAULT_SETTINGS.capture, this.settings.capture);
+    // A restart ends the sitting too: the veil lifts on load unless it's set to keep.
+    if (this.settings.veil && this.settings.veilLifts !== "keep") {
+      this.settings.veil = false;
+      await this.saveData(this.settings);
+    }
     this.addSettingTab(new ContextsSettingTab(this.app, this));
 
     // The log lives IN the vault (visible folder) so vault sync carries it
@@ -726,7 +731,7 @@ export default class ContextsPlugin extends Plugin {
   onunload() {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.barsToken++; // cancel any in-flight bar rebuild
-    for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx, .contexts-header-veil"))) el.remove();
+    for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx"))) el.remove();
     // Fire-and-forget: usually completes before the process is gone, and the
     // reader survives a truncated final line if it doesn't.
     this.enqueue(() => this.closeSpan(undefined, "quit"));
@@ -887,7 +892,7 @@ export default class ContextsPlugin extends Plugin {
         if (ctx) sigil = allSigils(relEvents).get(ctx);
       }
       if (token !== this.barsToken) return; // a newer rebuild superseded this one
-      for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx, .contexts-header-veil"))) el.remove();
+      for (const el of Array.from(document.querySelectorAll(".contexts-header-ctx"))) el.remove();
       if (!show) return;
       for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
         // Into the view header's action row, first child = leftmost action,
@@ -901,13 +906,13 @@ export default class ContextsPlugin extends Plugin {
         const path = (leaf.view as MarkdownView).file?.path;
         const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
         if (this.settings.veil) {
-          // Veiled: the chip says so and goes inert — the picker stays shut
-          // (a declaration is a visible, timestamped act; switching while
-          // hidden would announce the hidden work).
+          // Veiled: the chip becomes the lit pill, and one tap lifts the veil
+          // (leaving should be the easy direction). The picker stays shut —
+          // a declaration is a visible, timestamped act.
           bar.addClass("is-veiled");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
           bar.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
-          bar.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views.");
+          bar.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil.");
         } else if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
@@ -921,19 +926,8 @@ export default class ContextsPlugin extends Plugin {
           });
           bar.setAttribute("aria-label", "Declare or switch context");
         }
-        if (!this.settings.veil) bar.addEventListener("click", () => void this.openContextModal());
+        bar.addEventListener("click", () => (this.settings.veil ? this.setVeil(false) : void this.openContextModal()));
         actions.insertAdjacentElement("afterbegin", bar);
-        // The veil button, beside the chip: one control, one fact. Lit while
-        // veiled — when you're hidden, knowing you're hidden is the feedback.
-        const veilBtn = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-veil"] });
-        setIcon(veilBtn, "venetian-mask");
-        if (this.settings.veil) veilBtn.addClass("is-active");
-        veilBtn.setAttribute(
-          "aria-label",
-          this.settings.veil ? "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil." : "Veil: record but show nothing"
-        );
-        veilBtn.addEventListener("click", () => this.setVeil(!this.settings.veil));
-        bar.insertAdjacentElement("afterend", veilBtn);
       }
     })();
   }
@@ -1017,6 +1011,8 @@ export default class ContextsPlugin extends Plugin {
     this.idleClosed = true;
     const end = this.lastActivity;
     this.enqueue(() => this.closeSpan(end, "idle"));
+    // Going idle ends the sitting: a session-scoped veil lifts with it.
+    if (this.settings.veil && this.settings.veilLifts === "session") this.setVeil(false);
   }
 
   private onModify(file: unknown): void {
@@ -1258,6 +1254,7 @@ export default class ContextsPlugin extends Plugin {
 
 const CLEAR_CONTEXT = "— no context —";
 const NEW_CONTEXT = "+ new context";
+const VEIL = "veil — record but show nothing";
 
 /** Next free "context N" index for the one-click, no-naming path. */
 function nextContextIndex(names: string[]): number {
@@ -1293,6 +1290,7 @@ class ContextModal extends FuzzySuggestModal<string> {
     if (typed && !items.includes(typed)) items.unshift(typed);
     items.push(NEW_CONTEXT);
     if (this.current) items.push(CLEAR_CONTEXT);
+    items.push(VEIL);
     return items;
   }
 
@@ -1305,7 +1303,9 @@ class ContextModal extends FuzzySuggestModal<string> {
   }
 
   onChooseItem(item: string): void {
-    if (item === NEW_CONTEXT) {
+    if (item === VEIL) {
+      this.plugin.setVeil(true);
+    } else if (item === NEW_CONTEXT) {
       this.plugin.declareContext(`context ${nextContextIndex(this.names)}`);
     } else {
       this.plugin.declareContext(item === CLEAR_CONTEXT ? "" : item);

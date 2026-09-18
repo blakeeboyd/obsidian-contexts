@@ -201,12 +201,13 @@ export class ContextsPane extends ItemView {
     const evicted = path ? evictedFrom(relEvents, path) : new Set<string>();
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
     if (s.veil) {
-      // Veiled: the line says so and goes inert; no picker, no guess — a
+      // Veiled: the line says so, one click lifts; no picker, no guess — a
       // declaration is a visible act, and the veil is for not acting visibly.
       ctxLine.addClass("is-veiled");
       setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
       ctxLine.createSpan({ text: "Veiled" });
-      ctxLine.setAttribute("title", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views.");
+      ctxLine.setAttribute("title", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil.");
+      ctxLine.addEventListener("click", () => this.plugin.setVeil(false));
     } else {
       setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
       ctxLine.createSpan({

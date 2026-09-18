@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { LogEvent, SpanEvent } from "./recorder";
+import { LogEvent, SpanEvent, isSpan } from "./recorder";
 import {
   MIN_RELATED_SCORE,
   STARTER_SIGILS,
+  applyErasures,
   Stint,
   allRelationships,
   allSigils,
@@ -510,6 +511,23 @@ describe("relabeledDecls", () => {
     ];
     expect(currentContext(events)).toBe("alpha");
     expect(contextNames(events)).toEqual(["alpha"]);
+  });
+});
+
+describe("incognito", () => {
+  it("stamped events vanish from every view at the shared read gate; structural events stay", () => {
+    const hidden: LogEvent = { ...span("Secret.md", MIN), incognito: true };
+    const events: LogEvent[] = [
+      { t: 0, type: "context", name: "open work" },
+      span("Public.md", MIN),
+      hidden,
+      { t: 10 * MIN, type: "peek", path: "Peeked.md", from: "Secret.md", incognito: true },
+      { t: 11 * MIN, type: "relabel", from: "open work", to: "grant" },
+    ];
+    const visible = applyErasures(events);
+    expect(visible.filter(isSpan).map((sp) => sp.path)).toEqual(["Public.md"]);
+    expect(visible.some((ev) => "type" in ev && ev.type === "peek")).toBe(false);
+    expect(currentContext(visible)).toBe("grant"); // structural events untouched
   });
 });
 

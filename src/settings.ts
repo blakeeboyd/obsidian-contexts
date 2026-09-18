@@ -149,6 +149,9 @@ export interface ContextsSettings {
   halfLifeDays: number;
   trailDetailNewestFirst: boolean;
   paused: boolean;
+  // Incognito: keep recording (the log is irreplaceable memory) but stamp
+  // behavioral events so every view hides them at read time.
+  incognito: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
   // Bridge files (daily notes, inboxes): they inherit every context they're
   // visited under, but opening one never pulls the declaration — they
@@ -199,6 +202,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   halfLifeDays: 30,
   trailDetailNewestFirst: true,
   paused: false,
+  incognito: false,
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
@@ -247,6 +251,13 @@ export class ContextsSettingTab extends PluginSettingTab {
       .setName("Pause recording")
       .setDesc("Stop logging entirely until turned back on. Paused time simply won't exist in the record.")
       .addToggle((t) => t.setValue(this.plugin.settings.paused).onChange((v) => this.plugin.setPaused(v)));
+
+    new Setting(containerEl)
+      .setName("Incognito")
+      .setDesc(
+        "Keep recording, but hide these visits from every view — the map, the trail, the history, all of it. The log underneath stays complete; nothing shows until turned off, and what was hidden stays hidden."
+      )
+      .addToggle((t) => t.setValue(this.plugin.settings.incognito).onChange((v) => this.plugin.setIncognito(v)));
 
     new Setting(containerEl)
       .setName("Log folder")

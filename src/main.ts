@@ -384,6 +384,12 @@ export default class ContextsPlugin extends Plugin {
         new Notice(`Contexts: recording ${this.settings.paused ? "paused" : "resumed"}`);
       },
     });
+
+    this.addCommand({
+      id: "toggle-incognito",
+      name: "Toggle incognito (record but show nothing)",
+      callback: () => this.setIncognito(!this.settings.incognito),
+    });
   }
 
   /**
@@ -734,12 +740,36 @@ export default class ContextsPlugin extends Plugin {
   }
 
   private async record(ev: LogEvent): Promise<void> {
+    // Incognito stamps only behavioral events (visits, peeks, creates,
+    // notes); structural events must stay visible or the views' plumbing
+    // (renames, baselines, declarations) breaks. Spans stamp at CLOSE time,
+    // and setIncognito flushes the open span at each toggle, so no span
+    // straddles the boundary.
+    if (this.settings.incognito && (isSpan(ev) || ev.type === "peek" || ev.type === "create" || ev.type === "note")) {
+      ev.incognito = true;
+    }
     // Tag the in-memory copy so live events match read-tagged ones; append's
     // serializer strips the field (the shard filename is the persisted truth).
     ev.device = getDeviceId();
     this.events?.push(ev);
     await this.log.append(ev);
     this.refreshPane();
+  }
+
+  /**
+   * Incognito: keep recording, show nothing. The boundary is flushed crisp —
+   * the open span closes under the OLD state before the flip, so a sitting
+   * never straddles the veil.
+   */
+  setIncognito(v: boolean): void {
+    if (this.settings.incognito === v) return;
+    this.enqueue(async () => {
+      await this.closeSpan();
+      this.settings.incognito = v;
+      await this.saveSettings(); // refreshPane rides along: views + chip update
+      await this.onActiveChange();
+    });
+    new Notice(v ? "Contexts: incognito — recording continues, nothing will show" : "Contexts: incognito off");
   }
 
   /** A device's display name (settings), falling back to its id. */
@@ -857,7 +887,14 @@ export default class ContextsPlugin extends Plugin {
         // the current declaration covers it.
         const path = (leaf.view as MarkdownView).file?.path;
         const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
-        if (excludedBy) {
+        // Incognito outranks everything on the chip: while hidden, KNOWING
+        // you're hidden is the feedback that matters.
+        if (this.settings.incognito) {
+          bar.addClass("is-incognito");
+          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
+          bar.createSpan({ text: "Incognito", cls: "contexts-header-ctx-name" });
+          bar.setAttribute("aria-label", "Incognito: recording continues, nothing shows. Click to switch context anyway.");
+        } else if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
           bar.createSpan({ text: "Excluded", cls: "contexts-header-ctx-name" });

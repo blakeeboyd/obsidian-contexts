@@ -1254,7 +1254,7 @@ export default class ContextsPlugin extends Plugin {
 
 const CLEAR_CONTEXT = "— no context —";
 const NEW_CONTEXT = "+ new context";
-const VEIL = "veil — record but show nothing";
+const VEIL = "veil - actions are recorded but do not appear in the trail";
 
 /** Next free "context N" index for the one-click, no-naming path. */
 function nextContextIndex(names: string[]): number {
@@ -1285,12 +1285,13 @@ class ContextModal extends FuzzySuggestModal<string> {
   }
 
   getItems(): string[] {
-    const items = this.names.slice();
+    // Fixed actions FIRST: with many contexts they'd otherwise sink below
+    // the fold. Typing still filters straight to any of them.
+    const items: string[] = [];
     const typed = this.inputEl?.value.trim();
-    if (typed && !items.includes(typed)) items.unshift(typed);
-    items.push(NEW_CONTEXT);
+    if (typed && !this.names.includes(typed)) items.push(typed);
     if (this.current) items.push(CLEAR_CONTEXT);
-    items.push(VEIL);
+    items.push(NEW_CONTEXT, VEIL, ...this.names);
     return items;
   }
 

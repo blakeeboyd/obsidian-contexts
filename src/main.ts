@@ -1301,6 +1301,8 @@ class ContextModal extends FuzzySuggestModal<string> {
 
   renderSuggestion(match: { item: string }, el: HTMLElement): void {
     renderContextRow(el, match.item, this.ctxSets, this.sigils);
+    // A rule under the last fixed action, where the contexts begin.
+    if (match.item === VEIL && this.names.length) el.addClass("contexts-picker-divider");
   }
 
   onChooseItem(item: string): void {

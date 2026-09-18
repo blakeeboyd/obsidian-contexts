@@ -529,19 +529,19 @@ export class MapView extends ItemView {
       const weight = r.lastAt ? Math.pow(2, -(Date.now() - r.lastAt) / halfLifeMs) : 0;
       row.style.opacity = (0.35 + 0.65 * weight).toFixed(2);
       if (this.soloed.has(name)) row.addClass("is-soloed");
+      // The armed (declared) context reads as the current item does in any
+      // sidebar: full weight and color, no marker glyph.
+      if (name && name === current) {
+        row.addClass("is-armed");
+        row.setAttribute("aria-label", "Armed: new work goes here");
+      }
       row.createSpan({ text: sigils.get(name) ?? "", cls: "contexts-sigil" });
       row.createSpan({ cls: "contexts-braid-rail-dot" }).style.background = colorOf(name);
       row.createSpan({ text: name || "(no context)", cls: "contexts-map-rail-name" });
-      if (name && name === current) {
-        const armed = row.createSpan({ cls: "contexts-map-rail-armed" });
-        setIcon(armed, "compass");
-        armed.setAttribute("aria-label", "Armed: new work goes here");
-      }
-      // The guess-glint: recognition of a return, moved in from the pane.
+      // The guess: recognition of a return, offered as a quiet word.
       // Click confirms the declaration; ignoring costs nothing.
       if (guess && name === guess.name && guess.name !== current) {
-        const glint = row.createSpan({ cls: "contexts-map-rail-glint" });
-        setIcon(glint, "sparkles");
+        const glint = row.createSpan({ text: "guess?", cls: "contexts-map-rail-glint" });
         glint.setAttribute("aria-label", `Working in ${name}? Click to confirm`);
         glint.addEventListener("click", (evt) => {
           evt.stopPropagation();

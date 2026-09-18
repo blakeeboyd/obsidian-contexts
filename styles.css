@@ -349,14 +349,18 @@
   gap: 2px;
 }
 
+/* Rail rows follow the sidebar convention (Todoist, Linear, Framer): the
+   current item is heavier text; a selected item is a flat tint. No marker
+   glyphs, no accent bars. */
 .contexts-map-rail-row {
   display: flex;
   align-items: center;
   gap: 5px;
   padding: 3px 6px;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 12px;
+  color: var(--text-muted);
 }
 
 .contexts-map-rail-row:hover {
@@ -366,8 +370,16 @@
 
 .contexts-map-rail-row.is-soloed {
   background: var(--background-modifier-hover);
-  box-shadow: inset 2px 0 0 var(--interactive-accent);
   opacity: 1 !important;
+}
+
+.contexts-map-rail-row.is-armed {
+  color: var(--text-normal);
+  opacity: 1 !important;
+}
+
+.contexts-map-rail-row.is-armed .contexts-map-rail-name {
+  font-weight: 600;
 }
 
 .contexts-map-rail-name {
@@ -377,19 +389,14 @@
   white-space: nowrap;
 }
 
-.contexts-map-rail-armed svg,
-.contexts-map-rail-glint svg {
-  width: 13px;
-  height: 13px;
-  display: block;
-}
-
-.contexts-map-rail-armed {
-  color: var(--interactive-accent);
-}
-
 .contexts-map-rail-glint {
-  color: var(--text-accent);
+  font-size: 10px;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.contexts-map-rail-glint:hover {
+  color: var(--text-normal);
 }
 
 .contexts-map-rail-time {

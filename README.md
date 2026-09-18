@@ -146,4 +146,4 @@ npm run deploy          # build and copy into $EPISODIC_VAULT/.obsidian/plugins/
 
 ## Credits
 
-Seahorse icons by Andre Buand, from the Noun Project (CC BY 3.0): [light mode](https://thenounproject.com/icon/seahorse-6448301/) and [dark mode](https://thenounproject.com/icon/seahorse-6448274/).
+Seahorse icon by Andre Buand, from [the Noun Project](https://thenounproject.com/icon/seahorse-6448301/) (CC BY 3.0).

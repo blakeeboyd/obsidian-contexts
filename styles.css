@@ -535,7 +535,7 @@
 }
 
 .contexts-context.is-veiled {
-  color: var(--color-purple, var(--text-accent));
+  color: var(--interactive-accent, #4a9eff);
 }
 
 .contexts-header-ctx.is-veiled {
@@ -543,10 +543,19 @@
   cursor: default;
 }
 
-.contexts-header-ctx.is-veiled {
-  color: var(--color-purple, var(--text-accent));
-  background: var(--background-modifier-hover);
+/* Veiled: filled with the user's accent (Appearance → Accent color; themes
+   and snippets that restyle --interactive-accent are honored), falling back
+   to Obsidian's default blue where none is set. */
+.contexts-header-ctx.is-veiled,
+.view-header .view-actions .contexts-header-ctx.is-veiled {
+  color: var(--text-on-accent, #fff);
+  background: var(--interactive-accent, #4a9eff);
   border-radius: var(--radius-s);
+}
+
+.contexts-header-ctx.is-veiled:hover {
+  color: var(--text-on-accent, #fff);
+  background: var(--interactive-accent-hover, var(--interactive-accent, #4a9eff));
 }
 
 .contexts-header-ctx .contexts-chip-icon svg {

@@ -6,6 +6,7 @@ import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import { BRAID_VIEW_TYPE, BraidView } from "./braid";
 import { MAP_VIEW_TYPE, MapView } from "./map";
+import { MUNINN_ICON, registerMuninnIcon } from "./icon";
 import {
   LeaveReason,
   LogEvent,
@@ -108,6 +109,7 @@ export default class ContextsPlugin extends Plugin {
   private lastActivationAt: number | null = null;
 
   async onload() {
+    registerMuninnIcon(); // before any view or ribbon item names it
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.capture = Object.assign({}, DEFAULT_SETTINGS.capture, this.settings.capture);
     // A restart ends the sitting too: the veil lifts on load unless it's set to keep.
@@ -197,7 +199,7 @@ export default class ContextsPlugin extends Plugin {
       { capture: true }
     );
     this.ribbonEls = [
-      this.addRibbonIcon("footprints", "Open Muninn pane", () => void this.activatePane()),
+      this.addRibbonIcon(MUNINN_ICON, "Open Muninn pane", () => void this.activatePane()),
       this.addRibbonIcon("waypoints", "Open file map", () => void this.activateFullView(MAP_VIEW_TYPE)),
     ];
     this.applyRibbonIcons();

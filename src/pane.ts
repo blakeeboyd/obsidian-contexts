@@ -4,6 +4,7 @@ import type { EditDelta, LogEvent, PeekEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import { BRAID_VIEW_TYPE } from "./braid";
 import { MAP_VIEW_TYPE } from "./map";
+import { MUNINN_ICON } from "./icon";
 import type ContextsPlugin from "./main";
 import {
   ContextSet,
@@ -151,7 +152,7 @@ export class ContextsPane extends ItemView {
   }
 
   getIcon(): string {
-    return "footprints";
+    return MUNINN_ICON;
   }
 
   async onOpen(): Promise<void> {

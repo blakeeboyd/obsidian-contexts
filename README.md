@@ -149,3 +149,7 @@ npm run deploy          # build and copy into $MUNINN_VAULT/.obsidian/plugins/mu
 ```
 
 `docs/log-format.md` documents the event schema for anyone reading the log files directly.
+
+## Credits
+
+Raven icon by Side Project, from [the Noun Project](https://thenounproject.com/icon/raven-7214191/) (CC BY 3.0).

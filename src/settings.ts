@@ -155,6 +155,9 @@ export interface ContextsSettings {
   // When the veil lifts on its own: never (keep), when the sitting ends
   // (idle or restart), or only on restart.
   veilLifts: "keep" | "session" | "reload";
+  // Set after the pane is opened for the user once, on first install. From
+  // then on the workspace layout remembers whether the pane is open.
+  paneOpened: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
   // Bridge files (daily notes, inboxes): they inherit every context they're
   // visited under, but opening one never pulls the declaration — they
@@ -207,6 +210,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   paused: false,
   veil: false,
   veilLifts: "keep",
+  paneOpened: false,
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},

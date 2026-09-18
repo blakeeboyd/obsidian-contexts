@@ -236,6 +236,13 @@ export default class ContextsPlugin extends Plugin {
       );
       this.registerEvent(this.app.workspace.on("layout-change", () => this.updateContextBars()));
       this.updateContextBars();
+      // First install: open the pane once so the plugin has a face. After
+      // that the workspace layout remembers whether it is open or closed.
+      if (!this.settings.paneOpened) {
+        this.settings.paneOpened = true;
+        void this.saveSettings();
+        void this.activatePane();
+      }
       // App loses/regains focus: close the span so time in other apps is not
       // counted as engagement, reopen it on return.
       this.registerDomEvent(window, "blur", () => this.enqueue(() => this.closeSpan(undefined, "blur")));

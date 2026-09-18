@@ -894,21 +894,25 @@ export default class ContextsPlugin extends Plugin {
         // so it sits just left of the reading-mode toggle (Blake's spot).
         const actions = leaf.view.containerEl.querySelector(".view-header .view-actions");
         if (!actions) continue;
+        // Veiled: ONE control — the mask button grows a "Veiled" label and
+        // its lit background covers both; the context chip is withheld (the
+        // picker is shut anyway). Click lifts the veil.
+        if (this.settings.veil) {
+          const veilBtn = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-veil", "is-active"] });
+          setIcon(veilBtn.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
+          veilBtn.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
+          veilBtn.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil.");
+          veilBtn.addEventListener("click", () => this.setVeil(false));
+          actions.insertAdjacentElement("afterbegin", veilBtn);
+          continue;
+        }
         const bar = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-ctx"] });
         // An excluded file has no context BY BEING excluded (the pane's
         // compass-line rule): this leaf's chip says so instead of implying
         // the current declaration covers it.
         const path = (leaf.view as MarkdownView).file?.path;
         const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
-        if (this.settings.veil) {
-          // Veiled: the chip says so and goes inert — the picker stays shut
-          // (a declaration is a visible, timestamped act; switching while
-          // hidden would announce the hidden work).
-          bar.addClass("is-veiled");
-          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
-          bar.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
-          bar.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views.");
-        } else if (excludedBy) {
+        if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
           bar.createSpan({ text: "Excluded", cls: "contexts-header-ctx-name" });
@@ -921,18 +925,13 @@ export default class ContextsPlugin extends Plugin {
           });
           bar.setAttribute("aria-label", "Declare or switch context");
         }
-        if (!this.settings.veil) bar.addEventListener("click", () => void this.openContextModal());
+        bar.addEventListener("click", () => void this.openContextModal());
         actions.insertAdjacentElement("afterbegin", bar);
-        // The veil button, beside the chip: one control, one fact. Lit while
-        // veiled — when you're hidden, knowing you're hidden is the feedback.
+        // The veil button beside the chip, icon only while lifted.
         const veilBtn = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-veil"] });
         setIcon(veilBtn, "venetian-mask");
-        if (this.settings.veil) veilBtn.addClass("is-active");
-        veilBtn.setAttribute(
-          "aria-label",
-          this.settings.veil ? "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil." : "Veil: record but show nothing"
-        );
-        veilBtn.addEventListener("click", () => this.setVeil(!this.settings.veil));
+        veilBtn.setAttribute("aria-label", "Veil: record but show nothing");
+        veilBtn.addEventListener("click", () => this.setVeil(true));
         bar.insertAdjacentElement("afterend", veilBtn);
       }
     })();

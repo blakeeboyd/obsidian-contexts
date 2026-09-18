@@ -236,7 +236,24 @@ export default class ContextsPlugin extends Plugin {
             const ev: LogEvent = { t: Date.now(), type: "create", path: file.path };
             const by = this.consumeWriter(file.path);
             if (by) ev.by = by;
-            this.enqueue(() => this.record(ev));
+            this.enqueue(async () => {
+              // A newborn from the Web Clipper is born FULL with the
+              // clipper's source-URL frontmatter — unlike a user's note,
+              // born empty and grown inside a span. Announced writers
+              // (the plugin-write contract) take precedence.
+              // ponytail: a clipper that creates empty then fills would be
+              // missed; extend the check to the follow-up extmod if one
+              // ever shows up in practice.
+              if (!ev.by) {
+                try {
+                  const content = await this.app.vault.read(file);
+                  if (looksClipped(content)) ev.by = "clipper";
+                } catch {
+                  // deleted or unreadable between events: create stays unattributed
+                }
+              }
+              await this.record(ev);
+            });
           }
         })
       );
@@ -1413,6 +1430,20 @@ export class NameModal extends Modal {
   onClose() {
     this.contentEl.empty();
   }
+}
+
+/**
+ * The Web Clipper's signature on a newborn file: source-URL frontmatter
+ * (`source`/`url`/`clipped`) plus a body of real length — born full, not
+ * born empty. The word floor keeps template-created notes that merely
+ * carry a source field from wearing the label.
+ */
+export function looksClipped(content: string): boolean {
+  const fm = frontmatterOf(content);
+  const src = [fm["source"], fm["url"], fm["clipped"]].flat();
+  if (!src.some((v) => typeof v === "string" && /^https?:\/\//.test(v))) return false;
+  const body = content.replace(/^---\n[\s\S]*?\n---\n?/, "");
+  return (body.match(/\S+/g)?.length ?? 0) >= 20;
 }
 
 function frontmatterOf(content: string): Record<string, unknown> {

@@ -778,7 +778,11 @@ export default class ContextsPlugin extends Plugin {
       await this.saveSettings(); // refreshPane rides along: views + chip update
       await this.onActiveChange();
     });
-    new Notice(v ? "Contexts: veiled — recording continues, nothing will show" : "Contexts: veil lifted");
+    // The header button already shows the state where it's on; the toast
+    // only earns its place where it isn't.
+    const mode = this.settings.contextBar;
+    const barShowing = mode === "always" || (mode === "mobile" && Platform.isMobile);
+    if (!barShowing) new Notice(v ? "Contexts: veiled — recording continues, nothing will show" : "Contexts: veil lifted");
   }
 
   /** A device's display name (settings), falling back to its id. */

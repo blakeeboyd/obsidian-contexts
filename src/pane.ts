@@ -200,21 +200,30 @@ export class ContextsPane extends ItemView {
     // without the parenthetical: the declaration stands, the file is out.
     const evicted = path ? evictedFrom(relEvents, path) : new Set<string>();
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
-    setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
-    ctxLine.createSpan({
-      text: excludedBy
-        ? "No context: excluded file"
-        : ctx
-        ? `Context: ${sig(ctx)}${ctx}${evicted.has(ctx) ? " (this file removed)" : ""}`
-        : "No context declared",
-    });
-    ctxLine.setAttribute("title", "Click to declare or switch context");
-    ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
+    if (s.veil) {
+      // Veiled: the line says so and goes inert; no picker, no guess — a
+      // declaration is a visible act, and the veil is for not acting visibly.
+      ctxLine.addClass("is-veiled");
+      setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
+      ctxLine.createSpan({ text: "Veiled: recording continues, nothing shows" });
+      ctxLine.setAttribute("title", "Lift the veil to switch context");
+    } else {
+      setIcon(ctxLine.createSpan({ cls: "contexts-chip-icon" }), "compass");
+      ctxLine.createSpan({
+        text: excludedBy
+          ? "No context: excluded file"
+          : ctx
+          ? `Context: ${sig(ctx)}${ctx}${evicted.has(ctx) ? " (this file removed)" : ""}`
+          : "No context declared",
+      });
+      ctxLine.setAttribute("title", "Click to declare or switch context");
+      ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
+    }
 
     // The guess, offered quietly: recognition of a return to a known context.
     // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.
     const guess = guessContext(relEvents, Date.now(), s.halfLifeDays * 24 * 3600_000);
-    if (guess && !excludedBy) {
+    if (guess && !excludedBy && !s.veil) {
       const guessLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
       setIcon(guessLine.createSpan({ cls: "contexts-chip-icon" }), "sparkles");
       guessLine.createSpan({ text: `Working in ${sig(guess.name)}${guess.name}?` });

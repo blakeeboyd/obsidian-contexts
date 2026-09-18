@@ -534,6 +534,15 @@
   font-style: italic;
 }
 
+.contexts-context.is-veiled {
+  color: var(--color-purple, var(--text-accent));
+  cursor: default;
+}
+
+.contexts-context.is-veiled:hover {
+  background: none;
+}
+
 .contexts-header-ctx.is-veiled {
   color: var(--color-purple, var(--text-accent));
   cursor: default;

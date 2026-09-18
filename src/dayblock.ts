@@ -145,6 +145,8 @@ export class ContextsBlock extends MarkdownRenderChild {
   // The user has panned/zoomed/clicked this block's map: the gesture hint retires.
   private mapTouched = false;
   // A user-dragged block height (px); null = the drawing's own aspect ratio.
+  // Restored from settings on first render, saved back on resize, so the
+  // size survives closing the note and travels with data.json sync.
   private mapHeight: number | null = null;
   private tips = new HoverTip();
 
@@ -247,9 +249,17 @@ export class ContextsBlock extends MarkdownRenderChild {
     // the svg fills it. Default height comes from the drawing's aspect
     // ratio; a user-dragged height is remembered per block instance, so
     // live re-renders don't snap the box back.
+    const heightKey = `${this.sourcePath}::${this.source.trim()}`;
+    this.mapHeight ??= this.plugin.settings.blockHeights[heightKey] ?? null;
     if (this.mapHeight) wrap.style.height = `${this.mapHeight}px`;
     wrap.addEventListener("pointerup", () => {
-      if (wrap.offsetHeight) this.mapHeight = wrap.offsetHeight;
+      // The native resize drag is the only thing that sets an inline height
+      // (besides our own restore), so its presence means "user-chosen".
+      const h = parseInt(wrap.style.height);
+      if (!h || h === this.mapHeight) return;
+      this.mapHeight = h;
+      this.plugin.settings.blockHeights[heightKey] = h;
+      void this.plugin.saveSettings();
     });
     const svg = wrap.createSvg("svg", { cls: ["contexts-map-svg", "contexts-block-map-svg"] });
     const drawing = drawForest({

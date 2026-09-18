@@ -164,6 +164,9 @@ export interface ContextsSettings {
   // toggle): the declared context, one tap to switch. The phone has no room
   // for the sidebar pane, so "mobile" is the default.
   contextBar: "off" | "mobile" | "always";
+  // User-dragged heights for embedded map blocks, keyed by note path plus
+  // block body — remembered across sessions without ever editing the note.
+  blockHeights: Record<string, number>;
 }
 
 export const DEFAULT_SETTINGS: ContextsSettings = {
@@ -201,6 +204,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   deviceNames: {},
   logFolder: "Contexts Log",
   contextBar: "mobile",
+  blockHeights: {},
 };
 
 const CAPTURE_LABELS: Record<keyof CaptureSettings, [string, string]> = {

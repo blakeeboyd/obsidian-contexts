@@ -1,6 +1,6 @@
 # Contexts
 
-A temporal memory for your Obsidian vault. Contexts records which notes you work in, when, for how long, what changed, and what was open alongside, then shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
+A temporal memory for your Obsidian vault. Contexts records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
 
 The vault already knows what your notes say. Contexts records what you did with them.
 
@@ -24,7 +24,7 @@ You control the capture:
 
 | Control | Where | What it does |
 |---|---|---|
-| Capture toggles | Settings | Each signal (words, links, tags, headings, highlights, tasks, hovers, external edits...) can be switched off. Off means the work is skipped, not recorded and hidden. |
+| Capture toggles | Settings | Each signal (words, links, tags, headings, highlights, tasks, hovers, external edits...) can be switched off. Off means the work is skipped: nothing is recorded, nothing shown. |
 | Pause | Settings, command | Stops logging entirely. Paused time does not exist in the record. |
 | Veil | Context picker, settings | Keeps recording but hides everything recorded while veiled from every view. The log keeps it; the views never show it. |
 | Excluded folders and files | Settings, Manage... | Still recorded and still shown in their own trail, but they join no context and no relatedness score. The privacy line for relations. |
@@ -108,7 +108,7 @@ The veil is a read-time filter over flagged events. The log underneath stays com
 
 ## Multiple devices
 
-Each device writes its own log file. The views merge them into one history and tag each event with the device it came from, so a visit from the phone says so in the trail and the map can filter by device. Name your devices in settings. Requires Sync's "all other types" toggle on every device, as above.
+Each device writes its own log file. The views merge them into one history and tag each event with the device it came from. A visit from the phone says so in the trail, and the map can filter by device. Name your devices in settings. Requires Sync's "all other types" toggle on every device, as above.
 
 ## Settings, briefly
 

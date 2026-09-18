@@ -429,6 +429,13 @@ export default class ContextsPlugin extends Plugin {
    * carries no residue of the context it was merely born under.
    */
   declareContext(name: string, via?: "guess" | "auto", quiet = false): void {
+    // Nothing declares while veiled, the automatic home-context pull
+    // included: a declaration is a visible, timestamped act, and it would
+    // announce the hidden work. One guard here covers every entry point.
+    if (this.settings.veil) {
+      if (!quiet && via !== "auto") new Notice("Muninn: veiled — lift the veil to switch context.");
+      return;
+    }
     const now = Date.now();
     const ev: LogEvent = { t: now, type: "context", name };
     if (via) ev.via = via;

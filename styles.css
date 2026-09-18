@@ -503,9 +503,7 @@
    .view-action/.clickable-icon as a fixed square, which clipped the chip
    to the compass plus one character. */
 .view-header .view-actions .contexts-header-ctx,
-.view-header .view-actions .contexts-header-veil.is-active,
-.contexts-header-ctx,
-.contexts-header-veil.is-active {
+.contexts-header-ctx {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -545,10 +543,14 @@
   background: none;
 }
 
+.contexts-header-ctx.is-veiled {
+  color: var(--color-purple, var(--text-accent));
+  cursor: default;
+}
+
 .contexts-header-veil.is-active {
   color: var(--color-purple, var(--text-accent));
   background: var(--background-modifier-hover);
-  border-radius: var(--radius-s);
 }
 
 .contexts-header-ctx .contexts-chip-icon svg {

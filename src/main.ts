@@ -894,13 +894,15 @@ export default class ContextsPlugin extends Plugin {
         // so it sits just left of the reading-mode toggle (Blake's spot).
         const actions = leaf.view.containerEl.querySelector(".view-header .view-actions");
         if (!actions) continue;
-        // Veiled: ONE control — the mask button grows a "Veiled" label and
-        // its lit background covers both; the context chip is withheld (the
-        // picker is shut anyway). Click lifts the veil.
+        // Veiled: ONE control — "Veiled" then the mask, one lit background
+        // over both; the context chip is withheld (the picker is shut
+        // anyway). Click lifts the veil.
         if (this.settings.veil) {
+          // Same footprint as chip + button: the word sits where the chip's
+          // text was, the mask stays where the button always is.
           const veilBtn = createDiv({ cls: ["clickable-icon", "view-action", "contexts-header-veil", "is-active"] });
-          setIcon(veilBtn.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
           veilBtn.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
+          setIcon(veilBtn.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
           veilBtn.setAttribute("aria-label", "In Veiled Mode, actions are recorded but do not appear in your trail and will not appear in the map or any other views. Click to lift the veil.");
           veilBtn.addEventListener("click", () => this.setVeil(false));
           actions.insertAdjacentElement("afterbegin", veilBtn);

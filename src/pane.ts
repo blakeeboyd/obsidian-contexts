@@ -4,7 +4,7 @@ import type { EditDelta, LogEvent, PeekEvent, SpanEvent } from "./recorder";
 import { fmtClock, fmtDeltaVerbose, fmtDur, fmtTime, relDay, relTime } from "./format";
 import { BRAID_VIEW_TYPE } from "./braid";
 import { MAP_VIEW_TYPE } from "./map";
-import { NORN_ICON } from "./icon";
+import { EPISODIC_ICON } from "./icon";
 import type ContextsPlugin from "./main";
 import {
   ContextSet,
@@ -70,14 +70,14 @@ function renderPairRow(plugin: ContextsPlugin, container: HTMLElement, p: PairSc
   });
 }
 
-/** The full ranked audit of every pair the log knows, via "Norn: Show all relationships". */
+/** The full ranked audit of every pair the log knows, via "Episodic: Show all relationships". */
 export class RelationshipsModal extends Modal {
   constructor(app: App, private plugin: ContextsPlugin, private pairs: PairScore[]) {
     super(app);
   }
 
   onOpen(): void {
-    this.titleEl.setText("Norn: all relationships");
+    this.titleEl.setText("Episodic: all relationships");
     this.renderList();
   }
 
@@ -148,11 +148,11 @@ export class ContextsPane extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Norn";
+    return "Episodic";
   }
 
   getIcon(): string {
-    return NORN_ICON;
+    return EPISODIC_ICON;
   }
 
   async onOpen(): Promise<void> {
@@ -231,6 +231,14 @@ export class ContextsPane extends ItemView {
     }
 
     ctxLine.appendChild(mapBtn); // after the icon and text, so margin-left:auto pushes it right
+    // Settings, at the far right; the map button sits just left of it.
+    const gearBtn = ctxLine.createSpan({ cls: "contexts-pane-map-btn" });
+    setIcon(gearBtn, "settings");
+    gearBtn.setAttribute("aria-label", "Episodic settings");
+    gearBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      this.plugin.openSettings();
+    });
 
     // The guess, offered quietly: recognition of a return to a known context.
     // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.

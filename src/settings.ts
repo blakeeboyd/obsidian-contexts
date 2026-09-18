@@ -117,6 +117,34 @@ class ScopeModal extends Modal {
   }
 }
 
+/** The per-signal capture toggles, behind one Manage… button so the settings page stays short. */
+class CaptureModal extends Modal {
+  constructor(app: App, private plugin: ContextsPlugin) {
+    super(app);
+  }
+
+  onOpen() {
+    this.titleEl.setText("Capture");
+    this.contentEl.createDiv({ text: "Everything is on by default. Off skips the work; nothing is recorded from then on.", cls: "contexts-empty" });
+    for (const key of Object.keys(CAPTURE_LABELS) as (keyof CaptureSettings)[]) {
+      const [name, desc] = CAPTURE_LABELS[key];
+      new Setting(this.contentEl)
+        .setName(name)
+        .setDesc(desc)
+        .addToggle((t) =>
+          t.setValue(this.plugin.settings.capture[key]).onChange(async (v) => {
+            this.plugin.settings.capture[key] = v;
+            await this.plugin.saveSettings();
+          })
+        );
+    }
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
 export interface CaptureSettings {
   words: boolean;
   links: boolean;
@@ -173,8 +201,8 @@ export interface ContextsSettings {
   // between devices (Obsidian Sync does not sync extra plugin-folder files).
   logFolder: string;
   // The context chip in each note's header row (beside the reading-mode
-  // toggle): the declared context, one tap to switch. The phone has no room
-  // for the sidebar pane, so "mobile" is the default.
+  // toggle): the declared context, one tap to switch. On by default
+  // everywhere; the phone has no room for the sidebar pane.
   contextBar: "off" | "mobile" | "always";
   // User-dragged heights for embedded map blocks, keyed by note path plus
   // block body — remembered across sessions without ever editing the note.
@@ -218,8 +246,8 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
-  logFolder: "Norn Log",
-  contextBar: "mobile",
+  logFolder: "Episodic Log",
+  contextBar: "always",
   blockHeights: {},
 };
 
@@ -256,54 +284,55 @@ export class ContextsSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    const st = this.plugin.settings;
+    const save = () => this.plugin.saveSettings();
 
     new Setting(containerEl).setName("Recording").setHeading();
 
     new Setting(containerEl)
       .setName("Pause recording")
-      .setDesc("Stop logging entirely until turned back on. Paused time simply won't exist in the record.")
-      .addToggle((t) => t.setValue(this.plugin.settings.paused).onChange((v) => this.plugin.setPaused(v)));
+      .setDesc("Paused time is not recorded at all.")
+      .addToggle((t) => t.setValue(st.paused).onChange((v) => this.plugin.setPaused(v)));
 
     new Setting(containerEl)
       .setName("Veil")
-      .setDesc(
-        "Keep recording, but hide these visits from every view — the map, the trail, the history, all of it. The log underneath stays complete; nothing shows until turned off, and what was hidden stays hidden."
-      )
-      .addToggle((t) => t.setValue(this.plugin.settings.veil).onChange((v) => this.plugin.setVeil(v)));
+      .setDesc("Keep recording, show nothing.")
+      .addToggle((t) => t.setValue(st.veil).onChange((v) => this.plugin.setVeil(v)));
 
     new Setting(containerEl)
       .setName("The veil lifts")
-      .setDesc("Whether the veil stays on until you lift it, or lifts by itself when the sitting ends.")
       .addDropdown((d) =>
         d
           .addOption("keep", "Only when I lift it")
-          .addOption("session", "When the session ends (idle or restart)")
+          .addOption("session", "When the session ends")
           .addOption("reload", "When Obsidian restarts")
-          .setValue(this.plugin.settings.veilLifts)
+          .setValue(st.veilLifts)
           .onChange(async (v) => {
-            this.plugin.settings.veilLifts = v as ContextsSettings["veilLifts"];
-            await this.plugin.saveSettings();
+            st.veilLifts = v as ContextsSettings["veilLifts"];
+            await save();
           })
       );
 
-    new Setting(containerEl)
+    const logRow = new Setting(containerEl)
       .setName("Log folder")
-      .setDesc(
-        "In-vault folder holding the event log shards, so vault sync carries them between devices. With Obsidian Sync, enable \"Sync all other types\" on every device or the .jsonl shards stay local. Changing this moves the files."
-      )
+      .setDesc("In the vault, so sync carries it. Changing this moves the files.")
       .addSearch((search) => {
-        search.setPlaceholder("Folder path").setValue(this.plugin.settings.logFolder);
+        search.setPlaceholder("Folder path").setValue(st.logFolder);
         new FolderSuggest(this.app, search.inputEl, (path) => void this.plugin.setLogFolder(path));
         search.inputEl.addEventListener("blur", () => void this.plugin.setLogFolder(search.inputEl.value));
       });
+    logRow.controlEl.addClass("contexts-setting-wide");
+
+    new Setting(containerEl)
+      .setName("Capture")
+      .setDesc("Which signals to record.")
+      .addButton((b) => b.setButtonText("Manage…").onClick(() => new CaptureModal(this.app, this.plugin).open()));
 
     // Both lists take folders AND single files (the matcher treats an exact
     // path as itself); managed in a modal so the settings page stays short.
     const scopeRow = (name: string, desc: string, paths: string[]) => {
-      const count = () =>
-        paths.filter(Boolean).length === 0
-          ? "Nothing yet"
-          : `${paths.filter(Boolean).length} folder${paths.filter(Boolean).length === 1 ? "" : "s"} and files`;
+      const n = () => paths.filter(Boolean).length;
+      const count = () => (n() === 0 ? "Nothing yet" : `${n()} entr${n() === 1 ? "y" : "ies"}`);
       const row = new Setting(containerEl).setName(name).setDesc(desc);
       const counter = row.descEl.createDiv({ text: count(), cls: "contexts-scope-count" });
       row.addButton((b) =>
@@ -312,25 +341,10 @@ export class ContextsSettingTab extends PluginSettingTab {
         })
       );
     };
+    scopeRow("Excluded from contexts", "Recorded and shown, but in no context and no relatedness.", st.excludedFolders);
+    scopeRow("Bridge files", "Daily notes, inboxes: in every context, never switching yours. Frontmatter `context-role: bridge` works too.", st.bridgeFolders);
 
-    scopeRow(
-      "Excluded from contexts",
-      "Folders and files that are still recorded and keep their own trail, but stay out of contexts and relatedness — the privacy line.",
-      this.plugin.settings.excludedFolders
-    );
-
-    scopeRow(
-      "Bridge files",
-      "Folders and files (daily notes, inboxes) that inherit every context they're visited under, but never switch your context when opened. Frontmatter `context-role: bridge` marks a single file the same way.",
-      this.plugin.settings.bridgeFolders
-    );
-
-    new Setting(containerEl)
-      .setName("Device names")
-      .setDesc(
-        "Each device writes its own log shard; the views merge them into one history. Name the ids so a stint reads \"iPhone\" instead of a random id."
-      )
-      .setHeading();
+    new Setting(containerEl).setName("Devices").setHeading();
     const deviceEl = containerEl.createDiv();
     void (async () => {
       for (const id of await this.plugin.listDevices()) {
@@ -339,68 +353,51 @@ export class ContextsSettingTab extends PluginSettingTab {
           .addText((t) =>
             t
               .setPlaceholder("Name")
-              .setValue(this.plugin.settings.deviceNames[id] ?? "")
+              .setValue(st.deviceNames[id] ?? "")
               .onChange(async (v) => {
-                if (v.trim()) this.plugin.settings.deviceNames[id] = v.trim();
-                else delete this.plugin.settings.deviceNames[id];
-                await this.plugin.saveSettings();
+                if (v.trim()) st.deviceNames[id] = v.trim();
+                else delete st.deviceNames[id];
+                await save();
               })
           );
       }
     })();
 
-    new Setting(containerEl).setName("Capture").setHeading()
-      .setDesc("Everything is on by default. Turning a signal off skips its work entirely; it stops being recorded from that moment on.");
-
-    for (const key of Object.keys(CAPTURE_LABELS) as (keyof CaptureSettings)[]) {
-      const [name, desc] = CAPTURE_LABELS[key];
-      new Setting(containerEl)
-        .setName(name)
-        .setDesc(desc)
-        .addToggle((t) =>
-          t.setValue(this.plugin.settings.capture[key]).onChange(async (v) => {
-            this.plugin.settings.capture[key] = v;
-            await this.plugin.saveSettings();
-          })
-        );
-    }
-
     new Setting(containerEl).setName("Display").setHeading();
 
     new Setting(containerEl)
       .setName("Ribbon icons")
-      .setDesc("Show the pane and map icons in the left ribbon. The map button in the pane's header stays either way.")
+      .setDesc("The pane and map icons in the left ribbon.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.ribbonIcons).onChange(async (v) => {
-          this.plugin.settings.ribbonIcons = v;
-          await this.plugin.saveSettings();
+        t.setValue(st.ribbonIcons).onChange(async (v) => {
+          st.ribbonIcons = v;
+          await save();
           this.plugin.applyRibbonIcons();
         })
       );
 
     new Setting(containerEl)
       .setName("Context chip in the note header")
-      .setDesc("The declared context in each note's header row, beside the reading-mode toggle; tap it to switch. Made for the phone, where the sidebar pane is out of reach.")
       .addDropdown((d) =>
         d
           .addOption("off", "Off")
           .addOption("mobile", "Mobile only")
           .addOption("always", "All devices")
-          .setValue(this.plugin.settings.contextBar)
+          .setValue(st.contextBar)
           .onChange(async (v) => {
-            this.plugin.settings.contextBar = v as ContextsSettings["contextBar"];
-            await this.plugin.saveSettings();
+            st.contextBar = v as ContextsSettings["contextBar"];
+            await save();
             this.plugin.updateContextBars();
           })
       );
 
     new Setting(containerEl)
       .setName("Newest visits first")
-      .setDesc("Inside an expanded session, list visits from newest to oldest. Off lists them chronologically.")
+      .setDesc("Inside an expanded session.")
       .addToggle((t) =>
-        t.setValue(this.plugin.settings.trailDetailNewestFirst).onChange(async (v) => {
-          this.plugin.settings.trailDetailNewestFirst = v;
-          await this.plugin.saveSettings();
+        t.setValue(st.trailDetailNewestFirst).onChange(async (v) => {
+          st.trailDetailNewestFirst = v;
+          await save();
         })
       );
 
@@ -408,35 +405,32 @@ export class ContextsSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Idle timeout (minutes)")
-      .setDesc("With no typing, clicking, or scrolling for this long, the open span is closed back-dated to the last activity. 0 disables.")
-      .addSlider((s) =>
-        s.setLimits(0, 60, 5).setValue(this.plugin.settings.idleTimeoutMin).setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.idleTimeoutMin = v;
-            await this.plugin.saveSettings();
-          })
+      .setDesc("No input for this long closes the open visit. 0 disables.")
+      .addSlider((sl) =>
+        sl.setLimits(0, 60, 5).setValue(st.idleTimeoutMin).setDynamicTooltip().onChange(async (v) => {
+          st.idleTimeoutMin = v;
+          await save();
+        })
       );
 
     new Setting(containerEl)
       .setName("Session gap (minutes)")
-      .setDesc("A pause longer than this starts a new session. Sessions are derived at read time, so changing it regroups all history.")
-      .addSlider((s) =>
-        s.setLimits(5, 120, 5).setValue(this.plugin.settings.sessionGapMin).setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.sessionGapMin = v;
-            await this.plugin.saveSettings();
-          })
+      .setDesc("A longer pause starts a new session. Regroups all history.")
+      .addSlider((sl) =>
+        sl.setLimits(5, 120, 5).setValue(st.sessionGapMin).setDynamicTooltip().onChange(async (v) => {
+          st.sessionGapMin = v;
+          await save();
+        })
       );
 
     new Setting(containerEl)
       .setName("Related-files half-life (days)")
-      .setDesc("How fast old companionship fades in the related-files ranking. It decays, but never reaches zero.")
-      .addSlider((s) =>
-        s.setLimits(7, 180, 1).setValue(this.plugin.settings.halfLifeDays).setDynamicTooltip()
-          .onChange(async (v) => {
-            this.plugin.settings.halfLifeDays = v;
-            await this.plugin.saveSettings();
-          })
+      .setDesc("How fast old companionship fades.")
+      .addSlider((sl) =>
+        sl.setLimits(7, 180, 1).setValue(st.halfLifeDays).setDynamicTooltip().onChange(async (v) => {
+          st.halfLifeDays = v;
+          await save();
+        })
       );
   }
 }

@@ -349,6 +349,18 @@
   gap: 2px;
 }
 
+/* The Episodic icon carries both theme drawings; show one. */
+.theme-dark .episodic-icon-light,
+.theme-light .episodic-icon-dark {
+  display: none;
+}
+
+.contexts-setting-wide .search-input-container,
+.contexts-setting-wide .search-input-container input {
+  width: 100%;
+  min-width: 300px;
+}
+
 /* Rail rows follow the sidebar convention (Todoist, Linear, Framer): the
    current item is heavier text; a selected item is a flat tint. No marker
    glyphs, no accent bars. */

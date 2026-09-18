@@ -1,9 +1,9 @@
 {
-  "id": "norn",
-  "name": "Norn",
-  "version": "0.2.1",
+  "id": "episodic",
+  "name": "Episodic",
+  "version": "0.3.0",
   "minAppVersion": "1.4.0",
-  "description": "Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
+  "description": "Memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
   "author": "Blake Boyd",
   "isDesktopOnly": false
 }

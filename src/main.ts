@@ -6,7 +6,7 @@ import { dailyMarkdown, upsertDaySection } from "./daily";
 import { CONTEXTS_VIEW_TYPE, ContextsPane, RelationshipsModal } from "./pane";
 import { BRAID_VIEW_TYPE, BraidView } from "./braid";
 import { MAP_VIEW_TYPE, MapView } from "./map";
-import { NORN_ICON, registerNornIcon } from "./icon";
+import { EPISODIC_ICON, registerEpisodicIcon } from "./icon";
 import {
   LeaveReason,
   LogEvent,
@@ -109,7 +109,7 @@ export default class ContextsPlugin extends Plugin {
   private lastActivationAt: number | null = null;
 
   async onload() {
-    registerNornIcon(); // before any view or ribbon item names it
+    registerEpisodicIcon(); // before any view or ribbon item names it
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     this.settings.capture = Object.assign({}, DEFAULT_SETTINGS.capture, this.settings.capture);
     // A restart ends the sitting too: the veil lifts on load unless it's set to keep.
@@ -130,10 +130,9 @@ export default class ContextsPlugin extends Plugin {
     this.registerView(CONTEXTS_VIEW_TYPE, (leaf) => new ContextsPane(leaf, this));
     this.registerView(BRAID_VIEW_TYPE, (leaf) => new BraidView(leaf, this));
     this.registerView(MAP_VIEW_TYPE, (leaf) => new MapView(leaf, this));
-    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Norn", defaultMod: true });
-    // One block, four spellings: `norn` is the block; `muninn`, `contexts`,
-    // and `contexts-day` stay working aliases from before the renames.
-    for (const lang of ["norn", "muninn", "contexts", "contexts-day"]) {
+    this.registerHoverLinkSource(CONTEXTS_VIEW_TYPE, { display: "Episodic", defaultMod: true });
+    // One block: `episodic`; the earlier spellings stay as working aliases.
+    for (const lang of ["episodic", "norn", "muninn", "contexts", "contexts-day"]) {
       this.registerMarkdownCodeBlockProcessor(lang, (source, el, ctx) => {
         ctx.addChild(new ContextsBlock(this, el, source, ctx.sourcePath));
       });
@@ -145,8 +144,8 @@ export default class ContextsPlugin extends Plugin {
     const ws = this.app.workspace as unknown as {
       on(name: string, cb: (path: string, writer: string) => void): EventRef;
     };
-    // Every spelling honored: "norn:plugin-write" and the pre-rename names.
-    for (const evName of ["norn:plugin-write", "muninn:plugin-write", "contexts:plugin-write"]) {
+    // Every spelling honored: "episodic:plugin-write" and the pre-rename names.
+    for (const evName of ["episodic:plugin-write", "norn:plugin-write", "muninn:plugin-write", "contexts:plugin-write"]) {
       this.registerEvent(
         ws.on(evName, (path, writer) => {
           if (typeof path === "string" && typeof writer === "string" && writer) {
@@ -199,7 +198,7 @@ export default class ContextsPlugin extends Plugin {
       { capture: true }
     );
     this.ribbonEls = [
-      this.addRibbonIcon(NORN_ICON, "Open Norn pane", () => void this.activatePane()),
+      this.addRibbonIcon(EPISODIC_ICON, "Open Episodic pane", () => void this.activatePane()),
       this.addRibbonIcon("waypoints", "Open file map", () => void this.activateFullView(MAP_VIEW_TYPE)),
     ];
     this.applyRibbonIcons();
@@ -354,7 +353,7 @@ export default class ContextsPlugin extends Plugin {
           const events = await this.getEvents();
           const names = contextNames(events);
           if (!names.length) {
-            new Notice("Norn: no contexts to rename yet.");
+            new Notice("Episodic: no contexts to rename yet.");
             return;
           }
           new RenameContextModal(this.app, this, names, contextFileSets(events), allSigils(events)).open();
@@ -411,7 +410,7 @@ export default class ContextsPlugin extends Plugin {
       name: "Pause/resume recording",
       callback: () => {
         this.setPaused(!this.settings.paused);
-        new Notice(`Norn: recording ${this.settings.paused ? "paused" : "resumed"}`);
+        new Notice(`Episodic: recording ${this.settings.paused ? "paused" : "resumed"}`);
       },
     });
 
@@ -433,7 +432,7 @@ export default class ContextsPlugin extends Plugin {
     // included: a declaration is a visible, timestamped act, and it would
     // announce the hidden work. One guard here covers every entry point.
     if (this.settings.veil) {
-      if (!quiet && via !== "auto") new Notice("Norn: veiled — lift the veil to switch context.");
+      if (!quiet && via !== "auto") new Notice("Episodic: veiled — lift the veil to switch context.");
       return;
     }
     const now = Date.now();
@@ -598,13 +597,13 @@ export default class ContextsPlugin extends Plugin {
   async openEvictModal(): Promise<void> {
     const path = this.lastActiveMdPath;
     if (!path) {
-      new Notice("Norn: open a file first.");
+      new Notice("Episodic: open a file first.");
       return;
     }
     const relEvents = excludeFolders(applyErasures(applyRenames(healRenames(await this.getEvents()))), this.settings.excludedFolders);
     const threads = fileContexts(relEvents, path);
     if (!threads.length) {
-      new Notice("Norn: this file belongs to no context.");
+      new Notice("Episodic: this file belongs to no context.");
       return;
     }
     new EvictModal(this.app, this, path, threads.map((t) => t.name)).open();
@@ -652,7 +651,7 @@ export default class ContextsPlugin extends Plugin {
     const events = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
     const names = contextNames(events).filter((n) => n !== from);
     if (!names.length) {
-      new Notice("Norn: no other context to merge into.");
+      new Notice("Episodic: no other context to merge into.");
       return;
     }
     new PickContextModal(this.app, names, `Merge "${from}" into…`, (to) => this.relabelContext(from, to)).open();
@@ -666,7 +665,7 @@ export default class ContextsPlugin extends Plugin {
 
   async openContextModal(): Promise<void> {
     if (this.settings.veil) {
-      new Notice("Norn: veiled — lift the veil to switch context.");
+      new Notice("Episodic: veiled — lift the veil to switch context.");
       return;
     }
     // Excluded files can't belong to contexts, so the faces skip them.
@@ -826,7 +825,7 @@ export default class ContextsPlugin extends Plugin {
     // only earns its place where it isn't.
     const mode = this.settings.contextBar;
     const barShowing = mode === "always" || (mode === "mobile" && Platform.isMobile);
-    if (!barShowing) new Notice(v ? "Norn: veiled — recording continues, nothing will show" : "Norn: veil lifted");
+    if (!barShowing) new Notice(v ? "Episodic: veiled — recording continues, nothing will show" : "Episodic: veil lifted");
   }
 
   /** A device's display name (settings), falling back to its id. */
@@ -854,13 +853,20 @@ export default class ContextsPlugin extends Plugin {
     await this.saveSettings();
     this.log = new EventLog(this.app.vault.adapter, folder, getDeviceId());
     this.events = null; // re-read from the new location on next use
-    new Notice(`Norn: log moved to ${folder}`);
+    new Notice(`Episodic: log moved to ${folder}`);
   }
 
   private dayBlocks = new Set<ContextsBlock>();
   private refreshTimer: number | null = null;
 
   private ribbonEls: HTMLElement[] = [];
+
+  /** Open this plugin's settings tab (app.setting is undocumented but stable). */
+  openSettings(): void {
+    const setting = (this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting;
+    setting.open();
+    setting.openTabById(this.manifest.id);
+  }
 
   /** Show or hide the ribbon icons per the setting (the elements stay registered). */
   applyRibbonIcons(): void {
@@ -987,7 +993,7 @@ export default class ContextsPlugin extends Plugin {
   private async insertDaySummary(): Promise<void> {
     const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) {
-      new Notice("Norn: open the note to insert into first.");
+      new Notice("Episodic: open the note to insert into first.");
       return;
     }
     const iso = file.basename.match(/\d{4}-\d{2}-\d{2}/)?.[0];
@@ -996,7 +1002,7 @@ export default class ContextsPlugin extends Plugin {
     const events = applyErasures(applyRenames(healRenames(await this.getEvents())));
     const body = dailyMarkdown(events, dayStart, dayStart + 24 * 3600_000, this.settings.sessionGapMin * 60_000);
     await this.app.vault.process(file, (content) => upsertDaySection(content, body));
-    new Notice("Norn: day summary inserted.");
+    new Notice("Episodic: day summary inserted.");
   }
 
   private async activatePane(): Promise<void> {
@@ -1034,11 +1040,11 @@ export default class ContextsPlugin extends Plugin {
       for (const c of claims) await this.record({ t, type: "context", name: c.name, covers: c.covers });
       if (claims[claims.length - 1].name !== prev) await this.record({ t, type: "context", name: prev });
     });
-    new Notice("Norn: boundary moved");
+    new Notice("Episodic: boundary moved");
   }
 
   private enqueue(op: () => Promise<void>): void {
-    this.queue = this.queue.then(op).catch((e) => console.error("Norn:", e));
+    this.queue = this.queue.then(op).catch((e) => console.error("Episodic:", e));
   }
 
   private bumpActivity(): void {
@@ -1095,7 +1101,7 @@ export default class ContextsPlugin extends Plugin {
             if (removed.length) ev.edit.linksRemoved = removed;
           }
         } catch (e) {
-          console.error("Norn: extmod link diff failed", e);
+          console.error("Episodic: extmod link diff failed", e);
         }
       }
       await this.record(ev);
@@ -1590,7 +1596,7 @@ class HistoryModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("Norn: recent history");
+    this.titleEl.setText("Episodic: recent history");
     this.contentEl.createEl("pre", { text: this.text, cls: "contexts-history" });
   }
 

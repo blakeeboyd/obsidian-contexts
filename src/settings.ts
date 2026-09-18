@@ -158,6 +158,9 @@ export interface ContextsSettings {
   // Set after the pane is opened for the user once, on first install. From
   // then on the workspace layout remembers whether the pane is open.
   paneOpened: boolean;
+  // The two icons in the left ribbon (pane, map). Off hides them; the
+  // pane's own header keeps a map button either way.
+  ribbonIcons: boolean;
   excludedFolders: string[]; // normalized: trimmed, no trailing slash
   // Bridge files (daily notes, inboxes): they inherit every context they're
   // visited under, but opening one never pulls the declaration — they
@@ -211,6 +214,7 @@ export const DEFAULT_SETTINGS: ContextsSettings = {
   veil: false,
   veilLifts: "keep",
   paneOpened: false,
+  ribbonIcons: true,
   excludedFolders: [],
   bridgeFolders: [],
   deviceNames: {},
@@ -362,6 +366,17 @@ export class ContextsSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl).setName("Display").setHeading();
+
+    new Setting(containerEl)
+      .setName("Ribbon icons")
+      .setDesc("Show the pane and map icons in the left ribbon. The map button in the pane's header stays either way.")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.ribbonIcons).onChange(async (v) => {
+          this.plugin.settings.ribbonIcons = v;
+          await this.plugin.saveSettings();
+          this.plugin.applyRibbonIcons();
+        })
+      );
 
     new Setting(containerEl)
       .setName("Context chip in the note header")

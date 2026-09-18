@@ -241,6 +241,25 @@
   color: var(--text-muted);
 }
 
+.contexts-pane-map-btn {
+  margin-left: auto;
+  display: inline-flex;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  padding: 2px;
+}
+
+.contexts-pane-map-btn:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.contexts-pane-map-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .contexts-name-input {
   width: 100%;
 }

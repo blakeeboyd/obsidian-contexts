@@ -196,8 +196,11 @@ export default class ContextsPlugin extends Plugin {
       },
       { capture: true }
     );
-    this.addRibbonIcon("footprints", "Open Muninn pane", () => void this.activatePane());
-    this.addRibbonIcon("waypoints", "Open file map", () => void this.activateFullView(MAP_VIEW_TYPE));
+    this.ribbonEls = [
+      this.addRibbonIcon("footprints", "Open Muninn pane", () => void this.activatePane()),
+      this.addRibbonIcon("waypoints", "Open file map", () => void this.activateFullView(MAP_VIEW_TYPE)),
+    ];
+    this.applyRibbonIcons();
     this.addCommand({
       id: "open-pane",
       name: "Open pane",
@@ -847,6 +850,13 @@ export default class ContextsPlugin extends Plugin {
 
   private dayBlocks = new Set<ContextsBlock>();
   private refreshTimer: number | null = null;
+
+  private ribbonEls: HTMLElement[] = [];
+
+  /** Show or hide the ribbon icons per the setting (the elements stay registered). */
+  applyRibbonIcons(): void {
+    for (const el of this.ribbonEls) el.style.display = this.settings.ribbonIcons ? "" : "none";
+  }
 
   /** The plugin's own views announce the opens they cause, so the record knows the arrival surface. */
   noteUiOpen(via: OpenMethod): void {

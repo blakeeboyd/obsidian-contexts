@@ -200,6 +200,14 @@ export class ContextsPane extends ItemView {
     // without the parenthetical: the declaration stands, the file is out.
     const evicted = path ? evictedFrom(relEvents, path) : new Set<string>();
     const ctxLine = contentEl.createDiv({ cls: "contexts-reveal contexts-expandable contexts-context" });
+    // The map's door, top right of the pane, in line with the context.
+    const mapBtn = ctxLine.createSpan({ cls: "contexts-pane-map-btn" });
+    setIcon(mapBtn, "waypoints");
+    mapBtn.setAttribute("aria-label", "Open file map");
+    mapBtn.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      void this.plugin.activateFullView(MAP_VIEW_TYPE);
+    });
     if (s.veil) {
       // Veiled: the line says so, one click lifts; no picker, no guess — a
       // declaration is a visible act, and the veil is for not acting visibly.
@@ -220,6 +228,8 @@ export class ContextsPane extends ItemView {
       ctxLine.setAttribute("title", "Click to declare or switch context");
       ctxLine.addEventListener("click", () => void this.plugin.openContextModal());
     }
+
+    ctxLine.appendChild(mapBtn); // after the icon and text, so margin-left:auto pushes it right
 
     // The guess, offered quietly: recognition of a return to a known context.
     // Click confirms (logged as a confirmed guess — calibration data); ignoring costs nothing.

@@ -621,6 +621,10 @@ export default class ContextsPlugin extends Plugin {
   }
 
   async openContextModal(): Promise<void> {
+    if (this.settings.veil) {
+      new Notice("Contexts: veiled — lift the veil to switch context.");
+      return;
+    }
     // Excluded files can't belong to contexts, so the faces skip them.
     const relEvents = excludeFolders(await this.getEvents(), this.settings.excludedFolders);
     new ContextModal(this.app, this, contextNames(relEvents), currentContext(relEvents), contextFileSets(relEvents), allSigils(relEvents)).open();
@@ -892,7 +896,15 @@ export default class ContextsPlugin extends Plugin {
         // the current declaration covers it.
         const path = (leaf.view as MarkdownView).file?.path;
         const excludedBy = path ? this.settings.excludedFolders.find((f) => path === f || path.startsWith(f + "/")) : undefined;
-        if (excludedBy) {
+        if (this.settings.veil) {
+          // Veiled: the chip says so and goes inert — the picker stays shut
+          // (a declaration is a visible, timestamped act; switching while
+          // hidden would announce the hidden work).
+          bar.addClass("is-veiled");
+          setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "venetian-mask");
+          bar.createSpan({ text: "Veiled", cls: "contexts-header-ctx-name" });
+          bar.setAttribute("aria-label", "Veiled: recording continues, nothing shows. Lift the veil to switch context.");
+        } else if (excludedBy) {
           bar.addClass("is-excluded");
           setIcon(bar.createSpan({ cls: "contexts-chip-icon" }), "eye-off");
           bar.createSpan({ text: "Excluded", cls: "contexts-header-ctx-name" });
@@ -905,7 +917,7 @@ export default class ContextsPlugin extends Plugin {
           });
           bar.setAttribute("aria-label", "Declare or switch context");
         }
-        bar.addEventListener("click", () => void this.openContextModal());
+        if (!this.settings.veil) bar.addEventListener("click", () => void this.openContextModal());
         actions.insertAdjacentElement("afterbegin", bar);
         // The veil button, beside the chip: one control, one fact. Lit while
         // veiled — when you're hidden, knowing you're hidden is the feedback.

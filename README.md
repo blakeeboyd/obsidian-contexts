@@ -4,7 +4,7 @@
 
 Episodic records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
 
-The vault already knows what your notes say. Episodic records what you did with them. The name is Endel Tulving's: semantic memory is what you know, episodic memory is what you experienced, located in time and place. A vault is semantic memory; this is the other half. The icon is a seahorse, because the hippocampus, the structure that forms episodic memories, is named for one.
+The vault already knows what your notes say. Episodic records what you did with them. The name is Endel Tulving's: semantic memory is what you know, episodic memory is what you experienced, located in time and place. A vault is semantic memory; this is the other half.
 
 **Status: beta.** Read the next section before installing. This plugin writes a log of your activity into your vault.
 
@@ -146,4 +146,4 @@ npm run deploy          # build and copy into $EPISODIC_VAULT/.obsidian/plugins/
 
 ## Credits
 
-Seahorse icon by Andre Buand, from [the Noun Project](https://thenounproject.com/icon/seahorse-6448301/) (CC BY 3.0).
+Episode icon by IconMark, from [the Noun Project](https://thenounproject.com/icon/episode-3536466/) (CC BY 3.0).

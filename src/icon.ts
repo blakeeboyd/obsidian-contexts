@@ -1,11 +1,10 @@
 /**
- * The Episodic icon: a seahorse — the hippocampus, the structure that forms
- * episodic memory, is named for it (Greek hippokampos), because that is
- * what the anatomists saw. The filled silhouette: at ribbon size the line
- * version of the same drawing dissolves, the fill still reads.
+ * The Episodic icon: three stepped panels, episodes in a row. The line
+ * version, which matches Obsidian's Lucide icons and still reads at
+ * ribbon size (the geometry is simple enough).
  *
- * Seahorse by Andre Buand, from the Noun Project (CC BY 3.0):
- * https://thenounproject.com/icon/seahorse-6448301/
+ * Episode by IconMark, from the Noun Project (CC BY 3.0):
+ * https://thenounproject.com/icon/episode-3536466/
  *
  * addIcon takes the inner markup only (no enclosing <svg>) on a 100x100
  * viewBox; fill="currentColor" lets the glyph follow the theme's text and
@@ -13,11 +12,11 @@
  */
 import { addIcon } from "obsidian";
 
-export const EPISODIC_ICON = "episodic-seahorse";
+export const EPISODIC_ICON = "episodic-episodes";
 
-const SEAHORSE = `<path fill="currentColor" d="m51.305 82.949c-2.6562-1-3.3281-4.4531-1.4844-6.5938 1.0156-1.1875 1.9062-2.3906 2.6719-3.6094 11.234-17.422 0.5625-37.266 0.5625-37.266 1.4219 1.2031 3.2969 1.4688 5.0781 1.3438 2.7656-0.1875 5.25-1.3438 5.25-1.3438l0.89063-4.2969 6.75 0.39062c1.3125-2.1406 1.4375-4.3125 0-6.5156l-7.0469 0.5625-2.9531-4.25c-1.375-1.9844-3.4375-3.3594-5.7344-3.9062-0.73437-0.17188-1.4844-0.26562-2.2344-0.26562h-2.1562c-2.5625 0-5.0156 1.0156-6.8438 2.8125-2.2656 2.25-3.2656 5.4688-2.7188 8.5938l0.65625 3.6094c0.15625 0.95312 0.40625 1.875 0.75 2.7812 0.14062 0.39062 0.3125 0.79688 0.48437 1.1875 1.3281 2.9531 2.0469 6.0781 2.1094 9.2031 0.95312 0.35938 1.9375 0.67188 2.9688 0.92188l4.8594 1.2031-3.2031 3.8438c-2.6562 3.2031-3.5938 6.6719-2.8281 10.625l1 5.25-5.0625-1.7031c-1.4219-0.46875-2.7969-0.82812-4.1719-1.0781-0.73438 1.8906-1.3594 3.9062-1.8125 6.0781-0.23438 1.1406-0.34375 2.2812-0.34375 3.4062 0 6.5469 3.8438 12.688 9.9219 15.656 0 0 14.266 3.9375 16.234-10.047-5.75 3.875-9.3594 4.2344-11.594 3.4062zm3.9219-60.594c0.84375-0.03125 1.5625 0.65625 1.5938 1.5312l0.03125 1.8438c0.015626 0.85938-0.67187 1.5781-1.5312 1.5938h-0.03125c-0.84375 0-1.5469-0.67188-1.5625-1.5312l-0.03125-1.8438c-0.03125-0.875 0.65625-1.5781 1.5312-1.5938z"/><path fill="currentColor" d="m66.398 47.293-5.7656-7.6562c-0.71875 0.14062-1.4844 0.26562-2.2812 0.3125h-0.078124c2.5625 7.6562 5.1562 21.484-3.0781 34.344 14.906-0.4375 17.828-9.4219 16.234-16.469-0.875-3.8281-2.6719-7.3906-5.0312-10.531z"/><path fill="currentColor" d="m38.836 32.262-0.57813-3.0938c-0.73437-4.1719 0.60938-8.4219 3.5938-11.375 2.4531-2.4062 5.6562-3.7188 9.0469-3.7188h2.2656l-1.2969-4.1719s-20.406-0.046875-16.594 20.578z"/><path fill="currentColor" d="m47.566 49.348c-5.0312-1.2383-9.1875-3.5664-12.594-6.8359-6.6602 5.0781-8.2383 11.547-6.1875 19.012 5.3594-1.1211 10.418-0.58203 15.277 1.043-0.96094-4.9805 0.29297-9.3633 3.5039-13.219z"/>`;
+const EPISODES = `<path fill="currentColor" d="m91 5h-42c-1.1016 0-2 0.89844-2 2v4h-18c-1.1016 0-2 0.89844-2 2v4h-18c-1.1016 0-2 0.89844-2 2v62c0 1.1016 0.89844 2 2 2h18v4c0 1.1016 0.89844 2 2 2h18v4c0 1.1016 0.89844 2 2 2h42c1.1016 0 2-0.89844 2-2v-86c0-1.1016-0.89844-2-2-2zm-64 74h-16v-58h16zm20 6h-16v-70h16zm42 6h-38v-82h38z"/>`;
 
 /** Register the icon under EPISODIC_ICON. Call before anything references the name. */
 export function registerEpisodicIcon(): void {
-  addIcon(EPISODIC_ICON, SEAHORSE);
+  addIcon(EPISODIC_ICON, EPISODES);
 }

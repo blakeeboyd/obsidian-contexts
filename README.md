@@ -152,4 +152,4 @@ npm run deploy          # build and copy into $MUNINN_VAULT/.obsidian/plugins/mu
 
 ## Credits
 
-Raven icon by Side Project, from [the Noun Project](https://thenounproject.com/icon/raven-7214191/) (CC BY 3.0).
+Raven icon by IconInnovate, from [the Noun Project](https://thenounproject.com/icon/raven-7094362/) (CC BY 3.0).

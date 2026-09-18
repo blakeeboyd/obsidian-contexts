@@ -1,7 +1,7 @@
 {
   "name": "obsidian-muninn",
   "version": "0.1.0",
-  "description": "A temporal memory for your vault",
+  "description": "Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
   "main": "main.js",
   "scripts": {
     "dev": "MUNINN_VAULT=\"$HOME/Documents/Obsidian/EtchedInterim\" node esbuild.config.mjs",

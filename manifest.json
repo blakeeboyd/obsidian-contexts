@@ -3,7 +3,7 @@
   "name": "Muninn",
   "version": "0.1.1",
   "minAppVersion": "1.4.0",
-  "description": "Episodic memory for your vault: records which notes you work in, when, what changed, and what was open alongside, and hands it back as a trail, a map, and threads of work.",
+  "description": "Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.",
   "author": "Blake Boyd",
   "isDesktopOnly": false
 }

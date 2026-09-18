@@ -1,6 +1,6 @@
 # Muninn
 
-**Episodic memory for your vault.**
+**Episodic memory for your vault: records your actions in Obsidian to see the evolution of thought in your vault.**
 
 Muninn records which notes you work in, when, for how long, what changed, and what was open alongside. It shows that record back to you as a trail, a map of your movement, and a set of threads of work it calls contexts.
 
